@@ -16,18 +16,24 @@ main{max-width:700px;margin:0 auto;padding:16px}
 .card h2{font-size:15px}.sub{font-size:12px;color:var(--mut);margin:4px 0 6px}
 button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
 .btn{background:var(--acc);color:#111}.btn:disabled{opacity:.35;cursor:not-allowed}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
-input,textarea{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%}
+input,textarea,select{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%}
+select{width:auto}
 textarea{min-height:70px;font-size:12px}
 table{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
 td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 .pending{background:#451a03;border:1px solid #9a3412;border-radius:10px;padding:10px;margin-top:8px;font-size:13px}
 .note{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.6}
 .pill{font-size:12px;background:#111827;border:1px solid var(--line);border-radius:99px;padding:4px 10px}
+.seg{display:flex;background:#111827;border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-top:12px}
+.seg button{flex:1;background:none;color:var(--mut);font-size:14px;padding:10px}.seg button.on{background:var(--acc);color:#111}
+.chk{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--line);border-radius:10px;margin-top:6px;font-size:13px}
+.chk input{width:18px;height:18px;accent-color:var(--acc)}
+.chk .t{flex:1}.chk small{color:var(--mut)}
 </style>
 </head>
 <body>
 <header>
-<div style="font-size:12px;color:#fdba74">👨‍👩‍👧 관제센터 (부모용) · <span id="today"></span></div>
+<div style="font-size:12px;color:#fdba74">👨‍👩‍👧 관제센터 (부모용) · 잔고는 누적 합계</div>
 <div class="row" style="justify-content:space-between">
 <div class="bal" id="bal">0P</div><div id="status"></div>
 </div>
@@ -36,33 +42,43 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 <div class="card" id="lockCard"><h2>🔒 비밀번호</h2><p class="sub">기본 1234 · 자녀 앱에는 이 화면이 없습니다</p>
 <div class="row"><span style="flex:1"><input type="password" id="pw" placeholder="비밀번호"></span><button class="btn" onclick="unlock()">입장</button></div></div>
 <div id="body" style="display:none">
-<div class="card"><h2>💸 오늘 생활비 차감</h2><p class="sub">하루 지낼 때마다 직접 눌러 적용. 주말 등 쉬는 날은 안 눌러도 됨. 1일 1회만 적용됨.</p><div class="row"><button class="btn" id="applyBtn" onclick="applyToday()">오늘 차감 적용하기</button></div><div class="note" id="fixedNote"></div></div>
-<div class="card"><h2>📊 오늘 자녀 현황</h2><p class="sub">자녀 앱에서 체크/신청한 상태 (읽기 전용 — 수정은 승인·가감으로)</p><div id="todayView" class="row"></div></div>
+<div class="seg"><button id="segY" onclick="setDate('y')">어제</button><button id="segT" class="on" onclick="setDate('t')">오늘</button></div>
+<div class="card"><h2>💸 생활비 차감 <span style="color:var(--mut)" id="dateF"></span></h2>
+<p class="sub">나갈 돈만 체크하고 적용. 외박·수련회·외식은 해제. 주말에 학원 쉬면 학원비 해제. 날짜별로 1회씩 적용됨.</p>
+<div id="fixList"></div>
+<div class="row" style="margin-top:8px"><button class="btn" id="applyBtn" onclick="applyToday()">선택 항목 적용하기</button></div>
+<div class="note" id="fixedNote"></div></div>
+<div class="card"><h2>📊 자녀 현황 <span style="color:var(--mut)" id="dateV"></span></h2><p class="sub">해당 날짜에 체크·신청된 상태</p><div id="todayView" class="row"></div></div>
 <div class="card"><h2>✅ 승인 대기 <span class="pill" id="pendCount">0</span></h2><div id="approveList"></div></div>
+<div class="card"><h2>🎯 특별 미션 내주기 <span style="color:var(--mut)" id="dateM"></span></h2>
+<p class="sub">주말 대청소·단어 외우기 등. 내주면 자녀 앱에 뜸. 자녀가 완료 신청 → 아래 승인 대기에서 입금.</p>
+<div class="row"><span style="flex:2"><input type="text" id="mTitle" placeholder="미션 (예: 베란다 대청소)"></span><span style="flex:1"><input type="number" id="mAmt" placeholder="포인트"></span><button class="btn small" onclick="createMission()">등록</button></div>
+<div id="missionList"></div></div>
 <div class="card"><h2>⚙️ 학원비 · 비밀번호</h2>
 <div class="row"><span style="flex:1"><input type="number" id="academy" placeholder="월 학원비"></span><button class="btn small" onclick="saveAcademy()">저장</button></div>
 <div class="note" id="acadNote"></div>
 <div class="row" style="margin-top:8px"><span style="flex:1"><input type="text" id="newPw" placeholder="새 비밀번호"></span><button class="btn small ghost" onclick="savePw()">변경</button></div></div>
 <div class="card"><h2>➕➖ 벌금 / 보너스</h2>
-<div class="row"><span style="flex:2"><input type="text" id="reason" placeholder="사유 (예: 거짓말 벌금 -5000)"></span><span style="flex:1"><input type="number" id="amt" placeholder="금액"></span></div>
-<div class="row" style="margin-top:8px"><button class="btn" onclick="adjust(1)">+ 지급</button><button class="btn danger" onclick="adjust(-1)">− 차감</button><button class="btn ghost" onclick="lock()">잠금</button></div></div>
+<div class="row"><span style="flex:2"><input type="text" id="reason" placeholder="사유 (예: 거짓말 벌금)"></span><span style="flex:1"><input type="number" id="amt" placeholder="금액"></span></div>
+<div class="row" style="margin-top:8px"><button class="btn" onclick="adjust(1)">+ 지급</button><button class="btn danger" onclick="adjust(-1)">− 차감</button><button class="btn ghost" onclick="lock()">잠금</button></div>
+<div class="note">벌금·보너스는 오늘 날짜로 기록됩니다.</div></div>
 <div class="card"><h2>🧾 전체 내역</h2><table><thead><tr><th>날짜</th><th>항목</th><th>금액</th><th>잔고</th></tr></thead><tbody id="txBody"></tbody></table></div>
 <div class="card"><h2>🔄 자녀 기기와 맞추기</h2>
-<p class="sub">같은 PC·같은 브라우저면 자동 반영. 자녀 패드가 따로면: 자녀 앱 → 맞추기 → 코드 보기 → 복사 → 아래 붙여넣기 → 가져오기. 반대로 내 코드를 자녀에게 줄 수도 있음.</p>
+<p class="sub">자녀 앱 → 맞추기 → 코드 보기 → 복사 → 아래 붙여넣기 → 가져오기.</p>
 <div class="row"><button class="btn ghost small" onclick="showCode()">내 데이터 코드 보기</button><button class="btn ghost small" onclick="doImport()">위 코드 가져오기</button></div>
 <textarea id="code" style="margin-top:8px"></textarea>
-<div class="row" style="margin-top:8px"><button class="btn ghost small" onclick="resetDay()">오늘 체크 초기화</button><button class="btn danger small" onclick="resetAll()">전체 초기화</button></div></div>
+<div class="row" style="margin-top:8px"><button class="btn ghost small" onclick="resetDay()">이 날짜 체크 초기화</button><button class="btn danger small" onclick="resetAll()">전체 초기화</button></div></div>
 </div>
 </main>
 <script src="common.js"></script>
 <script>
 let S = load();
 let authed = false;
-function applyToday() {
-  const before = S.balance;
-  applyTodayFixed(S); S = load();
-  const diff = S.balance - before;
-  alert(diff === 0 ? '오늘 차감은 이미 적용됐어요.' : '오늘 생활비 ' + Math.abs(diff).toLocaleString() + 'P 차감 완료.');
+let viewDate = todayStr();
+function setDate(w) {
+  viewDate = w === 'y' ? addDays(todayStr(), -1) : todayStr();
+  document.getElementById('segY').className = w === 'y' ? 'on' : '';
+  document.getElementById('segT').className = w === 't' ? 'on' : '';
   render();
 }
 function unlock() {
@@ -74,13 +90,52 @@ function unlock() {
   } else alert('비밀번호 틀림');
 }
 function lock() { authed = false; document.getElementById('body').style.display = 'none'; document.getElementById('lockCard').style.display = 'block'; }
+// 항목별 차감 적용 (해당 날짜, 선택 항목만)
+function applyToday() {
+  const skip = {};
+  FIXED.filter((x) => x.def).forEach((x) => {
+    const c = document.getElementById('fix_' + x.id);
+    if (c && !c.checked) skip[x.id] = true;
+  });
+  const mealsSel = document.getElementById('fix_food_meals');
+  const meals = mealsSel ? +mealsSel.value : 2;
+  const before = S.balance;
+  const applied = applyFixed(S, viewDate, { skip, meals });
+  S = load();
+  const diff = S.balance - before;
+  alert(applied.length ? fmtDate(viewDate) + ' ' + applied.length + '개 항목, ' + Math.abs(diff).toLocaleString() + 'P 차감 완료.' : '적용할 항목이 없어요. (이미 적용됐거나 전부 해제됨)');
+  render();
+}
 function approve(id, ok) {
   const p = S.pending.find((x) => x.id === id); if (!p) return;
   p.status = ok ? 'done' : 'reject';
   if (ok) {
-    if (p.date === todayStr()) { if (!S.daily[p.date]) S.daily[p.date] = {}; S.daily[p.date][p.itemId] = true; }
-    S.balance += p.amt; S.txs.unshift({ d: todayStr(), label: p.label, amt: p.amt, bal: S.balance });
+    if (!S.daily[p.date]) S.daily[p.date] = {};
+    if (p.missionId) {
+      const mm = S.missions.find((x) => x.id === p.missionId);
+      if (mm) mm.status = 'done';
+      S.daily[p.date]['m' + p.missionId] = true;
+    } else if (p.itemId) {
+      S.daily[p.date][p.itemId] = true;
+    }
+    S.balance += p.amt; S.txs.unshift({ d: p.date, label: p.label, amt: p.amt, bal: S.balance });
+  } else if (p.missionId) {
+    const mm = S.missions.find((x) => x.id === p.missionId);
+    if (mm) mm.status = 'open';
   }
+  save(S); render();
+}
+function createMission() {
+  const t = document.getElementById('mTitle').value.trim(), a = +document.getElementById('mAmt').value;
+  if (!t || !a) return alert('미션 내용과 포인트를 입력하세요');
+  addMission(S, viewDate, t, a); S = load();
+  document.getElementById('mTitle').value = ''; document.getElementById('mAmt').value = '';
+  render();
+}
+function delMission(id) {
+  if (!confirm('미션을 삭제할까요? (대기·완료된 것도 함께 사라집니다)')) return;
+  S.missions = S.missions.filter((x) => x.id !== id);
+  S.pending = S.pending.filter((x) => x.missionId !== id);
   save(S); render();
 }
 function adjust(s) {
@@ -94,34 +149,54 @@ function saveAcademy() { S.academy = +document.getElementById('academy').value |
 function savePw() { const v = document.getElementById('newPw').value; if (v) { S.pw = v; save(S); alert('변경됨'); } }
 function showCode() { document.getElementById('code').value = exportCode(S); }
 function doImport() { try { S = importCode(document.getElementById('code').value); save(S); render(); alert('가져오기 완료'); } catch (e) { alert('코드 오류'); } }
-function resetDay() { if (confirm('오늘 체크만 초기화? (잔고 유지)')) { delete S.daily[todayStr()]; save(S); render(); } }
+function resetDay() { if (confirm(fmtDate(viewDate) + ' 체크만 초기화? (잔고 유지)')) { delete S.daily[viewDate]; save(S); render(); } }
 function resetAll() { if (confirm('전체 초기화?')) { localStorage.removeItem(DB_KEY); location.reload(); } }
 function render() {
   if (!authed) return;
-  document.getElementById('today').textContent = todayStr();
+  document.getElementById('segY').textContent = '어제 ' + fmtDate(addDays(todayStr(), -1));
+  document.getElementById('segT').textContent = '오늘 ' + fmtDate(todayStr());
+  document.getElementById('dateF').textContent = '· ' + fmtDate(viewDate);
+  document.getElementById('dateV').textContent = '· ' + fmtDate(viewDate);
+  document.getElementById('dateM').textContent = '· ' + fmtDate(viewDate);
   const el = document.getElementById('bal');
   el.textContent = S.balance.toLocaleString() + 'P';
   el.className = 'bal ' + (S.balance >= 0 ? 'plus' : 'minus');
   const st = statusOf(S.balance);
   document.getElementById('status').innerHTML = st === 'bankrupt' ? '🚨 파산' : st === 'blocked' ? '⛔ 마이너스 차단 중' : '정상';
   document.getElementById('academy').value = S.academy;
-  document.getElementById('acadNote').textContent = '일할: ' + acadDay(S).toLocaleString() + 'P/일 차감 중';
-  const d = S.daily[todayStr()] || {};
-  const fixedDone = FIXED.filter((x) => x.def && d[x.id]).length;
-  const fixedTotal = FIXED.filter((x) => x.def).length;
-  document.getElementById('fixedNote').textContent = fixedDone === fixedTotal
-    ? '✅ 오늘 차감 완료 (' + fixedDone + '/' + fixedTotal + ' 항목 적용됨)'
-    : '⬜ 오늘 미적용 (' + fixedDone + '/' + fixedTotal + '). 위에 버튼을 누르면 숙박·식비·수광열비·주사·핸드폰·학원비 일할이 한 번에 차감돼요.';
-  document.getElementById('applyBtn').disabled = fixedDone === fixedTotal;
-  const all = [...FIXED.map((x) => ({ ...x, amt: amtOf(S, x), grp: '고정' })), ...BASE.map((x) => ({ ...x, grp: '앞가림' })), ...EXTRA.map((x) => ({ ...x, grp: '노동' }))];
-  document.getElementById('todayView').innerHTML = all.map((x) =>
-    `<span class="pill">${d[x.id] ? '✅' : '⬜'} ${x.t}</span>`).join('');
+  document.getElementById('acadNote').textContent = '일할: ' + acadDay(S).toLocaleString() + 'P/일';
+  const d = S.daily[viewDate] || {};
+  // 차감 체크리스트 (이미 적용된 건 체크 비활성화)
+  const fl = document.getElementById('fixList'); fl.innerHTML = '';
+  FIXED.filter((x) => x.def).forEach((x) => {
+    const done = !!d[x.id];
+    const amt = x.id === 'academy' ? acadDay(S) : x.amt;
+    const row = document.createElement('div'); row.className = 'chk';
+    let extra = '';
+    if (x.id === 'food' && !done) extra = ` <select id="fix_food_meals"><option value="2">2끼</option><option value="1">1끼</option><option value="0">0끼(외식)</option></select>`;
+    row.innerHTML = `<input type="checkbox" id="fix_${x.id}" ${done ? 'checked disabled' : 'checked'}><div class="t"><b>${x.t} <span style="color:${amt > 0 ? '#4ade80' : '#f87171'}">${fmt(amt)}</span></b><br><small>${x.id === 'food' ? '끼니당 1,000P' : x.d}${done ? ' · ✅ 적용됨' : ''}</small></div>${extra}`;
+    fl.appendChild(row);
+  });
+  const allIds = FIXED.filter((x) => x.def).map((x) => x.id);
+  const doneCount = allIds.filter((id) => d[id]).length;
+  document.getElementById('fixedNote').textContent = '적용 상태: ' + doneCount + '/' + allIds.length + ' 항목 적용됨';
+  document.getElementById('applyBtn').disabled = doneCount === allIds.length;
+  // 자녀 현황
+  const items = [...FIXED.map((x) => ({ ...x, amt: amtOf(S, x) })), ...BASE, ...EXTRA];
+  let pills = items.map((x) => `<span class="pill">${d[x.id] ? '✅' : '⬜'} ${x.t}</span>`).join('');
+  pills += S.missions.filter((x) => x.date === viewDate).map((x) =>
+    `<span class="pill">${x.status === 'done' ? '✅' : x.status === 'wait' ? '⏳' : '⬜'} 미션: ${x.title}</span>`).join('');
+  document.getElementById('todayView').innerHTML = pills;
+  // 승인 대기
   const waits = S.pending.filter((p) => p.status === 'wait');
   document.getElementById('pendCount').textContent = waits.length + '건';
   document.getElementById('approveList').innerHTML = waits.map((p) =>
-    `<div class="pending"><b>${p.date}</b> · ${p.label} (+${p.amt.toLocaleString()}P)<div class="row" style="margin-top:6px"><button class="btn small" onclick="approve(${p.id},1)">승인·입금</button><button class="btn small ghost" onclick="approve(${p.id},0)">거절</button></div></div>`).join('') || '<p class="note">대기 없음</p>';
+    `<div class="pending"><b>${fmtDate(p.date)}</b> · ${p.label} (+${p.amt.toLocaleString()}P)<div class="row" style="margin-top:6px"><button class="btn small" onclick="approve(${p.id},1)">승인·입금</button><button class="btn small ghost" onclick="approve(${p.id},0)">거절</button></div></div>`).join('') || '<p class="note">대기 없음</p>';
+  // 미션 목록
+  document.getElementById('missionList').innerHTML = S.missions.filter((x) => x.date === viewDate).map((x) =>
+    `<div class="pending">🎯 ${x.title} (+${x.amt.toLocaleString()}P) · ${x.status === 'done' ? '✅ 완료' : x.status === 'wait' ? '⏳ 승인 대기' : '⬜ 진행중'} <button class="btn small ghost" onclick="delMission(${x.id})">삭제</button></div>`).join('') || '<p class="note">이 날짜에 미션 없음</p>';
   document.getElementById('txBody').innerHTML = S.txs.slice(0, 100).map((t) =>
-    `<tr><td>${t.d}</td><td>${t.label}</td><td style="color:${t.amt > 0 ? '#4ade80' : '#f87171'};font-weight:700">${fmt(t.amt)}</td><td>${t.bal.toLocaleString()}P</td></tr>`).join('') || '<tr><td colspan=4>내역 없음</td></tr>';
+    `<tr><td>${fmtDate(t.d)}</td><td>${t.label}</td><td style="color:${t.amt > 0 ? '#4ade80' : '#f87171'};font-weight:700">${fmt(t.amt)}</td><td>${t.bal.toLocaleString()}P</td></tr>`).join('') || '<tr><td colspan=4>내역 없음</td></tr>';
 }
 window.addEventListener('storage', (e) => { if (e.key === DB_KEY) { S = load(); if (authed) render(); } });
 </script>
