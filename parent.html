@@ -15,7 +15,7 @@ main{max-width:700px;margin:0 auto;padding:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:12px}
 .card h2{font-size:15px}.sub{font-size:12px;color:var(--mut);margin:4px 0 6px}
 button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
-.btn{background:var(--acc);color:#111}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
+.btn{background:var(--acc);color:#111}.btn:disabled{opacity:.35;cursor:not-allowed}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
 input,textarea{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%}
 textarea{min-height:70px;font-size:12px}
 table{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
@@ -36,7 +36,8 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 <div class="card" id="lockCard"><h2>🔒 비밀번호</h2><p class="sub">기본 1234 · 자녀 앱에는 이 화면이 없습니다</p>
 <div class="row"><span style="flex:1"><input type="password" id="pw" placeholder="비밀번호"></span><button class="btn" onclick="unlock()">입장</button></div></div>
 <div id="body" style="display:none">
-<div class="card"><h2>📊 오늘 자녀 현황</h2><p class="sub">자녀 앱에서 체크/신청한 상태 (읽기 전용 — 수정은 아래 승인·가감으로)</p><div id="todayView" class="row"></div></div>
+<div class="card"><h2>💸 오늘 생활비 차감</h2><p class="sub">하루 지낼 때마다 직접 눌러 적용. 주말 등 쉬는 날은 안 눌러도 됨. 1일 1회만 적용됨.</p><div class="row"><button class="btn" id="applyBtn" onclick="applyToday()">오늘 차감 적용하기</button></div><div class="note" id="fixedNote"></div></div>
+<div class="card"><h2>📊 오늘 자녀 현황</h2><p class="sub">자녀 앱에서 체크/신청한 상태 (읽기 전용 — 수정은 승인·가감으로)</p><div id="todayView" class="row"></div></div>
 <div class="card"><h2>✅ 승인 대기 <span class="pill" id="pendCount">0</span></h2><div id="approveList"></div></div>
 <div class="card"><h2>⚙️ 학원비 · 비밀번호</h2>
 <div class="row"><span style="flex:1"><input type="number" id="academy" placeholder="월 학원비"></span><button class="btn small" onclick="saveAcademy()">저장</button></div>
@@ -55,8 +56,15 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 </main>
 <script src="common.js"></script>
 <script>
-let S = load(); autoApplyFixed(S); S = load();
+let S = load();
 let authed = false;
+function applyToday() {
+  const before = S.balance;
+  applyTodayFixed(S); S = load();
+  const diff = S.balance - before;
+  alert(diff === 0 ? '오늘 차감은 이미 적용됐어요.' : '오늘 생활비 ' + Math.abs(diff).toLocaleString() + 'P 차감 완료.');
+  render();
+}
 function unlock() {
   if (document.getElementById('pw').value === S.pw) {
     authed = true;
@@ -99,6 +107,12 @@ function render() {
   document.getElementById('academy').value = S.academy;
   document.getElementById('acadNote').textContent = '일할: ' + acadDay(S).toLocaleString() + 'P/일 차감 중';
   const d = S.daily[todayStr()] || {};
+  const fixedDone = FIXED.filter((x) => x.def && d[x.id]).length;
+  const fixedTotal = FIXED.filter((x) => x.def).length;
+  document.getElementById('fixedNote').textContent = fixedDone === fixedTotal
+    ? '✅ 오늘 차감 완료 (' + fixedDone + '/' + fixedTotal + ' 항목 적용됨)'
+    : '⬜ 오늘 미적용 (' + fixedDone + '/' + fixedTotal + '). 위에 버튼을 누르면 숙박·식비·수광열비·주사·핸드폰·학원비 일할이 한 번에 차감돼요.';
+  document.getElementById('applyBtn').disabled = fixedDone === fixedTotal;
   const all = [...FIXED.map((x) => ({ ...x, amt: amtOf(S, x), grp: '고정' })), ...BASE.map((x) => ({ ...x, grp: '앞가림' })), ...EXTRA.map((x) => ({ ...x, grp: '노동' }))];
   document.getElementById('todayView').innerHTML = all.map((x) =>
     `<span class="pill">${d[x.id] ? '✅' : '⬜'} ${x.t}</span>`).join('');

@@ -46,8 +46,8 @@ function statusOf(balance) {
   if (balance < 0) return 'blocked';
   return 'ok';
 }
-// 고정지출 자동 적용: 하루 최초 진입 시 def:true 항목을 1회만 차감
-function autoApplyFixed(S) {
+// 오늘 생활비 차감 (부모가 버튼을 눌렀을 때만 1회 적용 — 주말 등 쉬는 날은 안 눌러도 됨)
+function applyTodayFixed(S) {
   const d = todayStr();
   if (!S.daily[d]) S.daily[d] = {};
   let changed = false;
