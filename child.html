@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>내 자산 — 자녀용</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
 :root{--bg:#0f172a;--card:#1e293b;--line:#334155;--txt:#f1f5f9;--mut:#94a3b8;--pos:#22c55e;--neg:#ef4444;--acc:#38bdf8}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -28,6 +29,7 @@ button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:poin
 .tabs button{flex:1;background:none;color:var(--mut);font-size:14px}.tabs button.on{color:#fff}
 .view{display:none}.view.on{display:block}
 textarea{background:#0f172a;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%;min-height:80px;font-size:12px}
+input[type=date]{background:#0f172a;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;color-scheme:dark}
 .note{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.6}
 table{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
 td{padding:8px;border-bottom:1px solid var(--line)}
@@ -46,6 +48,7 @@ td{padding:8px;border-bottom:1px solid var(--line)}
 <main>
 <section class="view on" id="v-today">
 <div class="seg"><button id="segY" onclick="setDate('y')">어제</button><button id="segT" class="on" onclick="setDate('t')">오늘</button></div>
+<div class="row" style="margin-top:8px"><span style="font-size:12px;color:var(--mut)">📅 직접 선택 (주말 몰아 입력용)</span><span style="flex:1"><input type="date" id="datePick" min="2026-10-17" onchange="pickDate(this.value)"></span></div>
 <div class="card"><h2>📉 빠져나간 돈 <span style="color:var(--mut)" id="dateA"></span></h2><p class="sub">아빠가 적용하면 차감돼요. 패드 쓴 날만 직접 체크! (어제분도 체크 가능)</p><div id="listA"></div></div>
 <div class="card"><h2>📈 내 앞가림하기 — 하면 돈 번다!</h2><p class="sub">공부·방 정리, 다 했으면 체크. 바로 포인트가 들어와요. (어제 잊은 것도 체크 가능)</p><div id="listB"></div></div>
 <div class="card"><h2>🙌 심부름하고 용돈 벌기</h2><p class="sub">[신청] 누르면 부모님 확인 후 입금! (어제 한 것도 신청 가능)</p><div id="listC"></div></div>
@@ -75,9 +78,20 @@ let S = load();
 let viewDate = todayStr(); // 't' 오늘 / 어제 전환. 소급 입력용.
 function setDate(w) {
   viewDate = w === 'y' ? addDays(todayStr(), -1) : todayStr();
+  syncSeg(w);
+  render();
+}
+function pickDate(v) {
+  if (!v) return;
+  if (v > todayStr()) { alert('미래 날짜는 안 돼요'); render(); return; }
+  if (v < '2026-10-17') { alert('운영 시작일(10/17) 이전은 안 돼요'); render(); return; }
+  viewDate = v;
+  syncSeg('');
+  render();
+}
+function syncSeg(w) {
   document.getElementById('segY').className = w === 'y' ? 'on' : '';
   document.getElementById('segT').className = w === 't' ? 'on' : '';
-  render();
 }
 function dd() { return S.daily[viewDate] || {}; }
 function addTx(label, amt, d) { S.balance += amt; S.txs.unshift({ d: d || viewDate, label, amt, bal: S.balance }); }
@@ -115,6 +129,7 @@ function render() {
   document.getElementById('dateM').textContent = '· ' + fmtDate(viewDate);
   document.getElementById('segY').textContent = '어제 ' + fmtDate(addDays(todayStr(), -1));
   document.getElementById('segT').textContent = '오늘 ' + fmtDate(todayStr());
+  const dp = document.getElementById('datePick'); dp.value = viewDate; dp.max = todayStr();
   const d = dd();
   // A
   const boxA = document.getElementById('listA'); boxA.innerHTML = '';

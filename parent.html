@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>관제센터 — 부모용</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
 :root{--bg:#111827;--card:#1f2937;--line:#374151;--txt:#f9fafb;--mut:#9ca3af;--pos:#22c55e;--neg:#ef4444;--acc:#facc15}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -17,6 +18,7 @@ main{max-width:700px;margin:0 auto;padding:16px}
 button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
 .btn{background:var(--acc);color:#111}.btn:disabled{opacity:.35;cursor:not-allowed}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
 input,textarea,select{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%}
+input[type=date]{color-scheme:dark}
 select{width:auto}
 textarea{min-height:70px;font-size:12px}
 table{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
@@ -43,6 +45,7 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 <div class="row"><span style="flex:1"><input type="password" id="pw" placeholder="비밀번호"></span><button class="btn" onclick="unlock()">입장</button></div></div>
 <div id="body" style="display:none">
 <div class="seg"><button id="segY" onclick="setDate('y')">어제</button><button id="segT" class="on" onclick="setDate('t')">오늘</button></div>
+<div class="row" style="margin-top:8px"><span style="font-size:12px;color:var(--mut)">📅 직접 선택 (주말 몰아 정산용)</span><span style="flex:1"><input type="date" id="datePick" min="2026-10-17" onchange="pickDate(this.value)"></span></div>
 <div class="card"><h2>💸 생활비 차감 <span style="color:var(--mut)" id="dateF"></span></h2>
 <p class="sub">나갈 돈만 체크하고 적용. 외박·수련회·외식은 해제. 주말에 학원 쉬면 학원비 해제. 날짜별로 1회씩 적용됨.</p>
 <div id="fixList"></div>
@@ -77,9 +80,20 @@ let authed = false;
 let viewDate = todayStr();
 function setDate(w) {
   viewDate = w === 'y' ? addDays(todayStr(), -1) : todayStr();
+  syncSeg(w);
+  render();
+}
+function pickDate(v) {
+  if (!v) return;
+  if (v > todayStr()) { alert('미래 날짜는 안 돼요'); render(); return; }
+  if (v < '2026-10-17') { alert('운영 시작일(10/17) 이전은 안 돼요'); render(); return; }
+  viewDate = v;
+  syncSeg('');
+  render();
+}
+function syncSeg(w) {
   document.getElementById('segY').className = w === 'y' ? 'on' : '';
   document.getElementById('segT').className = w === 't' ? 'on' : '';
-  render();
 }
 function unlock() {
   if (document.getElementById('pw').value === S.pw) {
@@ -155,6 +169,7 @@ function render() {
   if (!authed) return;
   document.getElementById('segY').textContent = '어제 ' + fmtDate(addDays(todayStr(), -1));
   document.getElementById('segT').textContent = '오늘 ' + fmtDate(todayStr());
+  const dp = document.getElementById('datePick'); dp.value = viewDate; dp.max = todayStr();
   document.getElementById('dateF').textContent = '· ' + fmtDate(viewDate);
   document.getElementById('dateV').textContent = '· ' + fmtDate(viewDate);
   document.getElementById('dateM').textContent = '· ' + fmtDate(viewDate);
