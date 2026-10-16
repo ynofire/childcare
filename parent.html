@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관제센터 — 부모용</title>
+<style>
+:root{--bg:#111827;--card:#1f2937;--line:#374151;--txt:#f9fafb;--mut:#9ca3af;--pos:#22c55e;--neg:#ef4444;--acc:#facc15}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:Pretendard,system-ui,sans-serif;padding-bottom:40px}
+header{background:#451a03;border-bottom:1px solid var(--line);padding:16px;position:sticky;top:0;z-index:10}
+.bal{font-size:36px;font-weight:800}.bal.plus{color:var(--pos)}.bal.minus{color:var(--neg)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:700px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:12px}
+.card h2{font-size:15px}.sub{font-size:12px;color:var(--mut);margin:4px 0 6px}
+button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+.btn{background:var(--acc);color:#111}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
+input,textarea{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%}
+textarea{min-height:70px;font-size:12px}
+table{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
+td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
+.pending{background:#451a03;border:1px solid #9a3412;border-radius:10px;padding:10px;margin-top:8px;font-size:13px}
+.note{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.6}
+.pill{font-size:12px;background:#111827;border:1px solid var(--line);border-radius:99px;padding:4px 10px}
+</style>
+</head>
+<body>
+<header>
+<div style="font-size:12px;color:#fdba74">👨‍👩‍👧 관제센터 (부모용) · <span id="today"></span></div>
+<div class="row" style="justify-content:space-between">
+<div class="bal" id="bal">0P</div><div id="status"></div>
+</div>
+</header>
+<main>
+<div class="card" id="lockCard"><h2>🔒 비밀번호</h2><p class="sub">기본 1234 · 자녀 앱에는 이 화면이 없습니다</p>
+<div class="row"><span style="flex:1"><input type="password" id="pw" placeholder="비밀번호"></span><button class="btn" onclick="unlock()">입장</button></div></div>
+<div id="body" style="display:none">
+<div class="card"><h2>📊 오늘 자녀 현황</h2><p class="sub">자녀 앱에서 체크/신청한 상태 (읽기 전용 — 수정은 아래 승인·가감으로)</p><div id="todayView" class="row"></div></div>
+<div class="card"><h2>✅ 승인 대기 <span class="pill" id="pendCount">0</span></h2><div id="approveList"></div></div>
+<div class="card"><h2>⚙️ 학원비 · 비밀번호</h2>
+<div class="row"><span style="flex:1"><input type="number" id="academy" placeholder="월 학원비"></span><button class="btn small" onclick="saveAcademy()">저장</button></div>
+<div class="note" id="acadNote"></div>
+<div class="row" style="margin-top:8px"><span style="flex:1"><input type="text" id="newPw" placeholder="새 비밀번호"></span><button class="btn small ghost" onclick="savePw()">변경</button></div></div>
+<div class="card"><h2>➕➖ 벌금 / 보너스</h2>
+<div class="row"><span style="flex:2"><input type="text" id="reason" placeholder="사유 (예: 거짓말 벌금 -5000)"></span><span style="flex:1"><input type="number" id="amt" placeholder="금액"></span></div>
+<div class="row" style="margin-top:8px"><button class="btn" onclick="adjust(1)">+ 지급</button><button class="btn danger" onclick="adjust(-1)">− 차감</button><button class="btn ghost" onclick="lock()">잠금</button></div></div>
+<div class="card"><h2>🧾 전체 내역</h2><table><thead><tr><th>날짜</th><th>항목</th><th>금액</th><th>잔고</th></tr></thead><tbody id="txBody"></tbody></table></div>
+<div class="card"><h2>🔄 자녀 기기와 맞추기</h2>
+<p class="sub">같은 PC·같은 브라우저면 자동 반영. 자녀 패드가 따로면: 자녀 앱 → 맞추기 → 코드 보기 → 복사 → 아래 붙여넣기 → 가져오기. 반대로 내 코드를 자녀에게 줄 수도 있음.</p>
+<div class="row"><button class="btn ghost small" onclick="showCode()">내 데이터 코드 보기</button><button class="btn ghost small" onclick="doImport()">위 코드 가져오기</button></div>
+<textarea id="code" style="margin-top:8px"></textarea>
+<div class="row" style="margin-top:8px"><button class="btn ghost small" onclick="resetDay()">오늘 체크 초기화</button><button class="btn danger small" onclick="resetAll()">전체 초기화</button></div></div>
+</div>
+</main>
+<script src="common.js"></script>
+<script>
+let S = load(); autoApplyFixed(S); S = load();
+let authed = false;
+function unlock() {
+  if (document.getElementById('pw').value === S.pw) {
+    authed = true;
+    document.getElementById('lockCard').style.display = 'none';
+    document.getElementById('body').style.display = 'block';
+    render();
+  } else alert('비밀번호 틀림');
+}
+function lock() { authed = false; document.getElementById('body').style.display = 'none'; document.getElementById('lockCard').style.display = 'block'; }
+function approve(id, ok) {
+  const p = S.pending.find((x) => x.id === id); if (!p) return;
+  p.status = ok ? 'done' : 'reject';
+  if (ok) {
+    if (p.date === todayStr()) { if (!S.daily[p.date]) S.daily[p.date] = {}; S.daily[p.date][p.itemId] = true; }
+    S.balance += p.amt; S.txs.unshift({ d: todayStr(), label: p.label, amt: p.amt, bal: S.balance });
+  }
+  save(S); render();
+}
+function adjust(s) {
+  const a = +document.getElementById('amt').value, r = document.getElementById('reason').value || '수동 조정';
+  if (!a) return alert('금액 입력');
+  const amt = s * Math.abs(a);
+  S.balance += amt; S.txs.unshift({ d: todayStr(), label: '[관리자] ' + r, amt, bal: S.balance });
+  save(S); render();
+}
+function saveAcademy() { S.academy = +document.getElementById('academy').value || 0; save(S); render(); }
+function savePw() { const v = document.getElementById('newPw').value; if (v) { S.pw = v; save(S); alert('변경됨'); } }
+function showCode() { document.getElementById('code').value = exportCode(S); }
+function doImport() { try { S = importCode(document.getElementById('code').value); save(S); render(); alert('가져오기 완료'); } catch (e) { alert('코드 오류'); } }
+function resetDay() { if (confirm('오늘 체크만 초기화? (잔고 유지)')) { delete S.daily[todayStr()]; save(S); render(); } }
+function resetAll() { if (confirm('전체 초기화?')) { localStorage.removeItem(DB_KEY); location.reload(); } }
+function render() {
+  if (!authed) return;
+  document.getElementById('today').textContent = todayStr();
+  const el = document.getElementById('bal');
+  el.textContent = S.balance.toLocaleString() + 'P';
+  el.className = 'bal ' + (S.balance >= 0 ? 'plus' : 'minus');
+  const st = statusOf(S.balance);
+  document.getElementById('status').innerHTML = st === 'bankrupt' ? '🚨 파산' : st === 'blocked' ? '⛔ 마이너스 차단 중' : '정상';
+  document.getElementById('academy').value = S.academy;
+  document.getElementById('acadNote').textContent = '일할: ' + acadDay(S).toLocaleString() + 'P/일 차감 중';
+  const d = S.daily[todayStr()] || {};
+  const all = [...FIXED.map((x) => ({ ...x, amt: amtOf(S, x), grp: '고정' })), ...BASE.map((x) => ({ ...x, grp: '앞가림' })), ...EXTRA.map((x) => ({ ...x, grp: '노동' }))];
+  document.getElementById('todayView').innerHTML = all.map((x) =>
+    `<span class="pill">${d[x.id] ? '✅' : '⬜'} ${x.t}</span>`).join('');
+  const waits = S.pending.filter((p) => p.status === 'wait');
+  document.getElementById('pendCount').textContent = waits.length + '건';
+  document.getElementById('approveList').innerHTML = waits.map((p) =>
+    `<div class="pending"><b>${p.date}</b> · ${p.label} (+${p.amt.toLocaleString()}P)<div class="row" style="margin-top:6px"><button class="btn small" onclick="approve(${p.id},1)">승인·입금</button><button class="btn small ghost" onclick="approve(${p.id},0)">거절</button></div></div>`).join('') || '<p class="note">대기 없음</p>';
+  document.getElementById('txBody').innerHTML = S.txs.slice(0, 100).map((t) =>
+    `<tr><td>${t.d}</td><td>${t.label}</td><td style="color:${t.amt > 0 ? '#4ade80' : '#f87171'};font-weight:700">${fmt(t.amt)}</td><td>${t.bal.toLocaleString()}P</td></tr>`).join('') || '<tr><td colspan=4>내역 없음</td></tr>';
+}
+window.addEventListener('storage', (e) => { if (e.key === DB_KEY) { S = load(); if (authed) render(); } });
+</script>
+</body>
+</html>

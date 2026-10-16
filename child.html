@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>내 자산 — 자녀용</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--txt:#f1f5f9;--mut:#94a3b8;--pos:#22c55e;--neg:#ef4444;--acc:#38bdf8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:Pretendard,system-ui,sans-serif;padding-bottom:120px}
+header{position:sticky;top:0;z-index:10;background:#082f49ee;border-bottom:1px solid var(--line);padding:16px}
+.bal{font-size:42px;font-weight:800}.bal.plus{color:var(--pos)}.bal.minus{color:var(--neg)}
+.badge{font-size:12px;padding:4px 10px;border-radius:99px;font-weight:700}
+.badge.ok{background:#052e16;color:#4ade80}.badge.warn{background:#450a0a;color:#f87171}.badge.dead{background:var(--neg);color:#fff}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:640px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:12px}
+.card h2{font-size:15px}.sub{font-size:12px;color:var(--mut);margin:4px 0 6px}
+.item{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:12px;margin-top:8px;background:#0f172a}
+.item input{width:22px;height:22px;accent-color:var(--acc)}
+.item .t{flex:1}.item .t b{font-size:14px;display:block}.item .t span{font-size:12px;color:var(--mut)}
+.amt{font-weight:800;font-size:14px;white-space:nowrap}.amt.plus{color:var(--pos)}.amt.minus{color:var(--neg)}
+button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+.btn{background:var(--acc);color:#082f49}.btn:disabled{opacity:.3;cursor:not-allowed}.btn.ghost{background:#334155;color:#fff}.btn.small{padding:6px 10px;font-size:12px}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:#082f49;border-top:1px solid var(--line);display:flex;padding:8px}
+.tabs button{flex:1;background:none;color:var(--mut);font-size:14px}.tabs button.on{color:#fff}
+.view{display:none}.view.on{display:block}
+textarea{background:#0f172a;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%;min-height:80px;font-size:12px}
+.note{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.6}
+table{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
+td{padding:8px;border-bottom:1px solid var(--line)}
+.done{opacity:.55}
+</style>
+</head>
+<body>
+<header>
+<div class="row" style="justify-content:space-between">
+<div><div style="font-size:12px;color:#7dd3fc">🧒 내 자산 (자녀용)</div><div class="bal" id="bal">0P</div>
+<div style="font-size:12px;color:var(--mut)">10,000P = 현금 5,000원 · <span id="today"></span></div></div>
+<div class="badge ok" id="status">정상</div>
+</div>
+<div class="note" id="msg"></div>
+</header>
+<main>
+<section class="view on" id="v-today">
+<div class="card"><h2>📉 오늘 빠져나간 돈 (자동)</h2><p class="sub">매일 자동으로 차감돼요. 패드 쓴 날만 직접 체크!</p><div id="listA"></div></div>
+<div class="card"><h2>📈 내 앞가림하기 — 하면 돈 번다!</h2><p class="sub">다 했으면 체크. 바로 포인트가 들어와요.</p><div id="listB"></div></div>
+<div class="card"><h2>🙌 심부름하고 용돈 벌기</h2><p class="sub">[신청] 누르면 부모님 폰에 알림처럼 떠요. 승인되면 입금!</p><div id="listC"></div></div>
+<div class="card"><h2>🎮 내 돈 쓰기</h2><p class="sub">포인트가 모자라면(마이너스) 쓸 수 없어요.</p><div class="row">
+<button class="btn" id="pc1" onclick="consume('PC 1시간',10000)">PC 1시간<br>-10,000P</button>
+<button class="btn ghost" id="pc2" onclick="consume('PC 2시간',20000)">PC 2시간<br>-20,000P</button>
+<button class="btn ghost" onclick="consume('용돈 환전 (현금 5,000원 받아가기)',10000)">💵 환전<br>-10,000P</button>
+</div><div class="note">환전을 누르면 부모님께 "현금 5,000원 주세요"라고 말하세요. 부모님이 확인해줘야 해요.</div></div>
+</section>
+<section class="view" id="v-log">
+<div class="card"><h2>🧾 내 통장 내역</h2><table><tbody id="txBody"></tbody></table></div>
+</section>
+<section class="view" id="v-sync">
+<div class="card"><h2>🔄 부모님과 맞추기</h2>
+<p class="sub">같은 집 Wi-Fi의 같은 브라우저면 자동으로 맞아요. 내 패드 따로 쓰면 아래 코드로 맞춰요.</p>
+<button class="btn small" onclick="showCode()">내 데이터 코드 보기</button>
+<textarea id="code" placeholder="여기에 코드가 나와요. 복사해서 부모님께 보내세요. / 부모님이 준 코드를 여기에 붙여넣고 가져오기를 누르세요."></textarea>
+<div class="row" style="margin-top:8px"><button class="btn ghost small" onclick="doImport()">코드 가져오기</button></div>
+</div>
+</section>
+</main>
+<nav class="tabs"><button class="on" onclick="tab('today',this)">오늘</button><button onclick="tab('log',this)">통장</button><button onclick="tab('sync',this)">맞추기</button></nav>
+<script src="common.js"></script>
+<script>
+let S = load();
+autoApplyFixed(S); S = load();
+function toggleBase(it, on) {
+  const d = todayStr();
+  if (on && !S.daily[d][it.id]) { S.daily[d][it.id] = true; addTx(S, it.t, it.amt); }
+  else if (!on && S.daily[d][it.id]) { delete S.daily[d][it.id]; addTx(S, it.t + ' (취소)', -it.amt); }
+  save(S); render();
+}
+function addTx(S, label, amt) { S.balance += amt; S.txs.unshift({ d: todayStr(), label, amt, bal: S.balance }); }
+function requestExtra(it) {
+  S.pending.unshift({ id: ++S.seq, itemId: it.id, label: it.t, amt: it.amt, date: todayStr(), status: 'wait' });
+  save(S); render();
+}
+function consume(label, cost) {
+  if (S.balance < cost) { alert('포인트가 모자라요! 먼저 앞가림이나 심부름을 하세요.'); return; }
+  if (!confirm(label + ' — ' + cost.toLocaleString() + 'P 쓸까요?')) return;
+  addTx(S, label, -cost); save(S); render();
+}
+function render() {
+  const st = statusOf(S.balance);
+  const el = document.getElementById('bal');
+  el.textContent = S.balance.toLocaleString() + 'P';
+  el.className = 'bal ' + (S.balance >= 0 ? 'plus' : 'minus');
+  document.getElementById('today').textContent = todayStr();
+  const b = document.getElementById('status'), m = document.getElementById('msg');
+  const blocked = st !== 'ok', bankrupt = st === 'bankrupt';
+  if (bankrupt) { b.textContent = '🚨 파산'; b.className = 'badge dead'; m.textContent = '파산! 밥·잠·주사 빼고 다 멈춤. 플러스가 될 때까지 PC·패드·환전 안 돼요.'; }
+  else if (blocked) { b.textContent = '⛔ 마이너스'; b.className = 'badge warn'; m.textContent = '마이너스예요! PC·패드 못 써요. 앞가림 + 심부름으로 복구하세요.'; }
+  else { b.textContent = '정상'; b.className = 'badge ok'; m.textContent = ''; }
+  // A: 읽기 전용 + pad만 체크 가능
+  const boxA = document.getElementById('listA'); boxA.innerHTML = '';
+  FIXED.forEach((it) => {
+    const amt = amtOf(S, it), done = !!S.daily[todayStr()][it.id];
+    const w = document.createElement('div'); w.className = 'item' + (done && it.id !== 'pad' ? ' done' : '');
+    if (it.id === 'pad') {
+      w.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} ${blocked ? 'disabled' : ''}><div class="t"><b>${it.t}</b><span>${blocked ? '마이너스라 사용 불가' : '오늘 썼으면 체크'}</span></div><div class="amt minus">-2,000P</div>`;
+      w.querySelector('input').onchange = (e) => {
+        if (e.target.checked) { S.daily[todayStr()].pad = true; addTx(S, it.t, -2000); }
+        else { delete S.daily[todayStr()].pad; addTx(S, it.t + ' (취소)', 2000); }
+        save(S); render();
+      };
+    } else {
+      w.innerHTML = `<div style="font-size:18px">${done ? '✅' : '⬜'}</div><div class="t"><b>${it.t}</b><span>자동 차감됨</span></div><div class="amt minus">${fmt(amt)}</div>`;
+    }
+    boxA.appendChild(w);
+  });
+  // B
+  const boxB = document.getElementById('listB'); boxB.innerHTML = '';
+  BASE.forEach((it) => {
+    const done = !!S.daily[todayStr()][it.id];
+    const w = document.createElement('div'); w.className = 'item';
+    w.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''} ${bankrupt ? 'disabled' : ''}><div class="t"><b>${it.t}</b><span>${it.d}</span></div><div class="amt plus">+${it.amt.toLocaleString()}P</div>`;
+    w.querySelector('input').onchange = (e) => toggleBase(it, e.target.checked);
+    boxB.appendChild(w);
+  });
+  // C
+  const boxC = document.getElementById('listC'); boxC.innerHTML = '';
+  EXTRA.forEach((it) => {
+    const done = !!S.daily[todayStr()][it.id];
+    const pend = S.pending.find((p) => p.itemId === it.id && p.date === todayStr() && p.status === 'wait');
+    const w = document.createElement('div'); w.className = 'item';
+    w.innerHTML = `<div class="t"><b>${it.t}</b><span>${done ? '✅ 입금 완료!' : pend ? '⏳ 부모님 확인 중…' : '부모님 승인 후 입금'}</span></div><div class="amt plus">+${it.amt.toLocaleString()}P</div>`;
+    const btn = document.createElement('button'); btn.className = 'btn small'; btn.textContent = done ? '완료' : pend ? '대기중' : '신청';
+    btn.disabled = done || !!pend || bankrupt; btn.onclick = () => requestExtra(it); w.appendChild(btn);
+    boxC.appendChild(w);
+  });
+  document.getElementById('pc1').disabled = document.getElementById('pc2').disabled = blocked;
+  document.getElementById('txBody').innerHTML = S.txs.slice(0, 50).map((t) =>
+    `<tr><td>${t.d}<br><b>${t.label}</b></td><td style="text-align:right;color:${t.amt > 0 ? '#4ade80' : '#f87171'};font-weight:700">${fmt(t.amt)}</td></tr>`).join('') || '<tr><td>아직 내역이 없어요</td></tr>';
+}
+function tab(v, btn) {
+  document.querySelectorAll('.view').forEach((x) => x.classList.remove('on'));
+  document.getElementById('v-' + v).classList.add('on');
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.remove('on'));
+  btn.classList.add('on');
+}
+function showCode() { document.getElementById('code').value = exportCode(S); }
+function doImport() {
+  try { S = importCode(document.getElementById('code').value); save(S); render(); alert('가져오기 완료!'); }
+  catch (e) { alert('코드가 올바르지 않아요'); }
+}
+window.addEventListener('storage', (e) => { if (e.key === DB_KEY) { S = load(); render(); } });
+render();
+</script>
+</body>
+</html>
