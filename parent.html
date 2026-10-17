@@ -10,14 +10,17 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--txt);font-family:Pretendard,system-ui,sans-serif;padding-bottom:40px}
 header{background:#451a03;border-bottom:1px solid var(--line);padding:16px;position:sticky;top:0;z-index:10}
+.net{display:none;background:#7c2d12;color:#fed7aa;font-size:12px;padding:6px 12px;text-align:center}
 .bal{font-size:36px;font-weight:800}.bal.plus{color:var(--pos)}.bal.minus{color:var(--neg)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 main{max-width:700px;margin:0 auto;padding:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:12px}
-.card h2{font-size:15px}.sub{font-size:12px;color:var(--mut);margin:4px 0 6px}
+.card h2,.card summary{font-size:15px;font-weight:700}.card summary{cursor:pointer}
+.sub{font-size:12px;color:var(--mut);margin:4px 0 6px}
 button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
-.btn{background:var(--acc);color:#111}.btn:disabled{opacity:.35;cursor:not-allowed}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
-input,textarea,select{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%}
+button:disabled{opacity:.35;cursor:not-allowed}
+.btn{background:var(--acc);color:#111}.btn.ghost{background:#374151;color:#fff}.btn.danger{background:var(--neg);color:#fff}.btn.small{padding:6px 10px;font-size:12px}
+input,textarea,select{background:#111827;border:1px solid var(--line);color:#fff;border-radius:8px;padding:8px;width:100%;font-size:14px}
 select{width:auto}
 textarea{min-height:70px;font-size:12px}
 input[type=date]{color-scheme:dark}
@@ -27,230 +30,327 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 .note{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.6}
 .pill{font-size:12px;background:#111827;border:1px solid var(--line);border-radius:99px;padding:4px 10px}
 .seg{display:flex;background:#111827;border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-top:12px}
-.seg button{flex:1;background:none;color:var(--mut);font-size:14px;padding:10px}.seg button.on{background:var(--acc);color:#111}
+.seg button{flex:1;background:none;color:var(--mut);font-size:14px;padding:10px}.seg button.on{background:var(--acc);color:#111}.seg button:disabled{opacity:.3}
 .chk{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--line);border-radius:10px;margin-top:6px;font-size:13px}
 .chk input{width:18px;height:18px;accent-color:var(--acc)}
 .chk .t{flex:1}.chk small{color:var(--mut)}
-.sync-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin-left:6px}
-.sync-dot.off{background:#ef4444}
+.irow{display:flex;gap:6px;align-items:center;margin-top:6px}
+.irow .ititle{flex:2;min-width:0}.irow .iamt{flex:1;min-width:70px}
+.ichk{display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}.ichk input{width:auto}
+.welcome{background:#052e16;border:1px solid #166534;color:#bbf7d0;border-radius:16px;padding:14px;margin-top:12px;font-size:13px;line-height:1.7;display:none}
+.linkbox{display:none;margin-top:10px;background:#111827;border:1px solid var(--line);border-radius:10px;padding:10px}
 </style>
 </head>
 <body>
 <header>
-<div style="font-size:12px;color:#fdba74">👨‍👩‍👧 관제센터 (부모용) · 잔고는 누적 합계 <span class="sync-dot off" id="syncDot"></span></div>
-<div class="row" style="justify-content:space-between">
-<div class="bal" id="bal">0P</div><div id="status"></div>
-</div>
+  <div style="font-size:12px;color:#fdba74">👨‍👩‍👧 관제센터 (부모용) · 잔고는 누적 합계</div>
+  <div class="row" style="justify-content:space-between">
+    <div class="bal" id="bal">…</div><div id="status"></div>
+  </div>
 </header>
+<div class="net" id="net"></div>
 <main>
-<div class="card" id="lockCard"><h2>🔒 비밀번호</h2><p class="sub">기본 1234 · 자녀 앱에는 이 화면이 없습니다</p>
-<div class="row"><span style="flex:1"><input type="password" id="pw" placeholder="비밀번호"></span><button class="btn" onclick="app.unlock()">입장</button></div></div>
-<div id="body" style="display:none">
-<div class="seg"><button id="segY" onclick="app.setDate('y')">어제</button><button id="segT" class="on" onclick="app.setDate('t')">오늘</button></div>
-<div class="row" style="margin-top:8px"><span style="font-size:12px;color:var(--mut)">📅 직접 선택 (주말 몰아 정산용)</span><span style="flex:1"><input type="date" id="datePick" min="2026-10-17" onchange="app.pickDate(this.value)"></span></div>
-<div class="card"><h2>💸 생활비 차감 <span style="color:var(--mut)" id="dateF"></span></h2>
-<p class="sub">나갈 돈만 체크하고 적용. 외박·수련회·외식은 해제. 주말에 학원 쉬면 학원비 해제. 날짜별로 1회씩 적용됨.</p>
-<div id="fixList"></div>
-<div class="row" style="margin-top:8px"><button class="btn" id="applyBtn" onclick="app.applyToday()">선택 항목 적용하기</button></div>
-<div class="note" id="fixedNote"></div></div>
-<div class="card"><h2>📊 자녀 현황 <span style="color:var(--mut)" id="dateV"></span></h2><p class="sub">해당 날짜에 체크·신청된 상태</p><div id="todayView" class="row"></div></div>
-<div class="card"><h2>✅ 승인 대기 <span class="pill" id="pendCount">0</span></h2><div id="approveList"></div></div>
-<div class="card"><h2>🎯 특별 미션 내주기 <span style="color:var(--mut)" id="dateM"></span></h2>
-<p class="sub">주말 대청소·단어 외우기 등. 내주면 자녀 앱에 뜸. 자녀가 완료 신청 → 아래 승인 대기에서 입금.</p>
-<div class="row"><span style="flex:2"><input type="text" id="mTitle" placeholder="미션 (예: 베란다 대청소)"></span><span style="flex:1"><input type="number" id="mAmt" placeholder="포인트"></span><button class="btn small" onclick="app.createMission()">등록</button></div>
-<div id="missionList"></div></div>
-<div class="card"><h2>⚙️ 학원비 · 비밀번호</h2>
-<div class="row"><span style="flex:1"><input type="number" id="academy" placeholder="월 학원비"></span><button class="btn small" onclick="app.saveAcademy()">저장</button></div>
-<div class="note" id="acadNote"></div>
-<div class="row" style="margin-top:8px"><span style="flex:1"><input type="text" id="newPw" placeholder="새 비밀번호"></span><button class="btn small ghost" onclick="app.savePw()">변경</button></div></div>
-<div class="card"><h2>➕➖ 벌금 / 보너스</h2>
-<div class="row"><span style="flex:2"><input type="text" id="reason" placeholder="사유 (예: 거짓말 벌금)"></span><span style="flex:1"><input type="number" id="amt" placeholder="금액"></span></div>
-<div class="row" style="margin-top:8px"><button class="btn" onclick="app.adjust(1)">+ 지급</button><button class="btn danger" onclick="app.adjust(-1)">− 차감</button><button class="btn ghost" onclick="app.lock()">잠금</button></div>
-<div class="note">벌금·보너스는 오늘 날짜로 기록됩니다.</div></div>
-<div class="card"><h2>🧾 전체 내역</h2><table><thead><tr><th>날짜</th><th>항목</th><th>금액</th><th>잔고</th></tr></thead><tbody id="txBody"></tbody></table></div>
-<div class="card"><h2>🔄 자녀 기기와 맞추기</h2>
-<p class="sub">같은 Supabase 데이터베이스를 쓰면 자동으로 실시간 연동돼요. 다른 계정일 때만 아래 코드로 맞춰요.</p>
-<div class="row"><button class="btn ghost small" onclick="app.showCode()">내 데이터 코드 보기</button><button class="btn ghost small" onclick="app.doImport()">위 코드 가져오기</button></div>
-<textarea id="code" style="margin-top:8px"></textarea>
-<div class="row" style="margin-top:8px"><button class="btn ghost small" onclick="app.resetDay()">이 날짜 체크 초기화</button><button class="btn danger small" onclick="app.resetAll()">전체 초기화</button></div></div>
-</div>
+  <div class="welcome" id="welcome">
+    🎉 <b>가족이 만들어졌어요!</b><br>
+    아래 <b>🔗 기기 연결</b>에서 '자녀 폰 링크'를 만들어 아들 폰으로 보내세요. 아들 폰에서 링크를 열면 자동으로 연결돼요.<br>
+    아내 폰도 같은 방식으로 '부모 기기 링크'를 만들어 연결할 수 있어요. 그리고 '복구 코드'는 꼭 따로 저장해 두세요.
+  </div>
+
+  <div class="seg"><button id="segY" data-seg="y">어제</button><button id="segT" class="on" data-seg="t">오늘</button></div>
+  <div class="row" style="margin-top:8px"><span style="font-size:12px;color:var(--mut)">📅 직접 선택 (주말 몰아 정산용)</span><span style="flex:1"><input type="date" id="datePick"></span></div>
+
+  <div class="card"><h2>💸 생활비 차감 <span style="color:var(--mut)" id="dateF"></span></h2>
+    <p class="sub">나갈 돈만 체크하고 적용. 외박·수련회·외식은 해제. 주말에 학원 쉬면 학원비 해제. 날짜별로 항목당 1회씩 적용돼요.</p>
+    <div id="fixList"></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="applyBtn">선택 항목 적용하기</button></div>
+    <div class="note" id="fixedNote"></div></div>
+
+  <div class="card"><h2>📊 자녀 현황 <span style="color:var(--mut)" id="dateV"></span></h2><p class="sub">해당 날짜에 체크·신청된 상태</p><div id="todayView" class="row"></div></div>
+
+  <div class="card"><h2>✅ 승인 대기 <span class="pill" id="pendCount">0건</span></h2><div id="approveList"></div></div>
+
+  <div class="card"><h2>🎯 특별 미션 내주기 <span style="color:var(--mut)" id="dateM"></span></h2>
+    <p class="sub">주말 대청소·단어 외우기 등. 내주면 자녀 앱에 뜸. 자녀가 완료 신청 → 위 승인 대기에서 입금.</p>
+    <div class="row"><span style="flex:2"><input type="text" id="mTitle" placeholder="미션 (예: 베란다 대청소)" maxlength="40"></span><span style="flex:1"><input type="number" id="mAmt" placeholder="포인트" inputmode="numeric"></span><button class="btn small" id="btnMission">등록</button></div>
+    <div id="missionList"></div></div>
+
+  <div class="card"><h2>⚙️ 월 학원비</h2>
+    <div class="row"><span style="flex:1"><input type="number" id="academy" placeholder="월 학원비" inputmode="numeric"></span><button class="btn small" id="btnAcademy">저장</button></div>
+    <div class="note" id="acadNote"></div>
+  </div>
+
+  <div class="card"><h2>➕➖ 벌금 / 보너스</h2>
+    <div class="row"><span style="flex:2"><input type="text" id="reason" placeholder="사유 (예: 거짓말 벌금)"></span><span style="flex:1"><input type="number" id="amt" placeholder="금액" inputmode="numeric"></span></div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="btnPlus">+ 지급</button><button class="btn danger" id="btnMinus">− 차감</button></div>
+    <div class="note">벌금·보너스는 오늘 날짜로 기록됩니다.</div>
+  </div>
+
+  <div class="card"><details id="itemsBox"><summary>🧩 항목 관리 (금액 수정 · 추가 · 사용 해제)</summary>
+    <p class="sub" style="margin-top:8px">금액은 숫자만 입력하세요. 차감 항목은 자동으로 −로 처리돼요. 없애고 싶은 항목은 '사용'을 끄세요. (내역은 그대로 남아요) 식비 금액은 '하루 2끼' 기준이고, 끼니당은 그 절반이에요.</p>
+    <div id="itemList"></div>
+    <div class="sub" style="margin-top:14px"><b>새 항목 추가</b></div>
+    <div class="irow"><select id="newKind" style="flex:2"></select><input id="newTitle" class="ititle" placeholder="이름" maxlength="40"><input id="newAmt" class="iamt" type="number" placeholder="금액" inputmode="numeric"></div>
+    <div class="row" style="margin-top:8px"><button class="btn small" id="btnAddItem">추가</button></div>
+  </details></div>
+
+  <div class="card"><h2>🧾 전체 내역</h2><table><thead><tr><th>날짜</th><th>항목</th><th>금액</th><th>잔고</th></tr></thead><tbody id="txBody"></tbody></table></div>
+
+  <div class="card"><details id="devBox"><summary>🔗 기기 연결 (아들 폰 · 아내 폰)</summary>
+    <p class="sub" style="margin-top:8px">링크를 만들어 카톡 등으로 보내고, 받은 기기에서 열면 연결돼요. <b>링크는 1회용(48시간)</b>이에요. 카톡 안에서 열면 안 되고, 링크를 길게 눌러 크롬/사파리로 열어 주세요.</p>
+    <div class="row"><span style="flex:1"><input id="invLabel" placeholder="기기 이름 (예: 아들 폰)" maxlength="30"></span></div>
+    <div class="row" style="margin-top:8px"><button class="btn small" id="btnInvChild">🧒 자녀 폰 링크 만들기</button><button class="btn ghost small" id="btnInvParent">👨‍👩‍👧 부모 기기 링크 만들기</button></div>
+    <div class="linkbox" id="linkBox"><textarea id="linkText" readonly></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn small" id="btnCopy">복사</button><button class="btn ghost small" id="btnShare" style="display:none">공유</button></div></div>
+    <div class="sub" style="margin-top:14px"><b>연결된 기기</b></div>
+    <div id="credList"><p class="note">불러오는 중…</p></div>
+    <div class="sub" style="margin-top:14px"><b>복구 코드</b></div>
+    <p class="note" style="margin-top:0">폰을 잃어버리거나 바꿀 때 이 코드로 부모 기기를 다시 연결할 수 있어요. <b>남에게 보여주지 말고</b> 안전한 곳에 저장하세요.</p>
+    <div class="row" style="margin-top:8px"><button class="btn ghost small" id="btnRecovery">복구 코드 보기</button></div>
+    <input id="recoveryText" readonly style="display:none;margin-top:8px;font-size:12px">
+  </details></div>
+
+  <div class="card"><h2>🧨 초기화</h2>
+    <div class="row" style="margin-top:8px"><button class="btn ghost small" id="btnResetDay">이 날짜 체크 초기화</button><button class="btn danger small" id="btnResetAll">전체 초기화</button></div>
+    <div class="note">이 날짜 체크 초기화: 보고 있는 날짜에 적용·체크된 항목을 모두 취소하고 낸 돈·받은 포인트도 함께 되돌려요(잔고가 안 어긋나요). 외박 등을 잘못 적용했을 때 지우고 다시 적용하세요. 전체 초기화: 잔고·내역·미션을 지우고 0부터 다시 시작해요. (항목·학원비 설정은 유지)</div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost small" id="btnOut">이 기기 연결 해제</button></div>
+  </div>
 </main>
-<script type="module">
-import { loadFromDb, saveToDb, subscribeToChanges, defaultState } from './supabase.js';
-import * as C from './common.js';
+<script src="common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let S = null, itemsSig = '', selDay = null;
+let skipSel = {}, meals = 2; // 생활비 적용 화면의 선택값 (폴링으로 화면이 갱신돼도 유지)
+const KINDS = [
+  ['fixed', '생활비 (부모가 날짜별로 적용)'], ['optional', '선택 차감 (자녀가 쓴 날 체크)'], ['base', '앞가림 (하면 +)'],
+  ['extra', '심부름 (승인 후 +)'], ['spend', '쓰기 (자녀가 사용)'],
+];
+$('newKind').innerHTML = KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
 
-const app = {
-  S: defaultState(),
-  authed: false,
-  viewDate: C.todayStr(),
-  channel: null,
+function itemsHtml(items) {
+  return KINDS.map(([k, label]) => {
+    const rows = items.filter((i) => i.kind === k);
+    return `<div class="sub" style="margin-top:12px"><b>${label}</b></div>` + (rows.map((it) =>
+      `<div class="irow" data-id="${it.id}"><input class="ititle" value="${esc(it.title)}" maxlength="40">` +
+      `<input class="iamt" type="number" inputmode="numeric" value="${Math.abs(it.amount)}" ${it.slug === 'academy' ? 'disabled title="위의 월 학원비에서 바꿔요"' : ''}>` +
+      `<label class="ichk"><input type="checkbox" class="iact" ${it.active ? 'checked' : ''}> 사용</label>` +
+      `<button class="btn small ghost" data-save-item>저장</button></div>`).join('') || '<p class="note">없음</p>');
+  }).join('');
+}
 
-  async init() {
-    this.S = await loadFromDb();
-    this.channel = subscribeToChanges((remote) => {
-      if (!this.S._updated_at || remote._updated_at > this.S._updated_at) {
-        this.S = remote;
-        document.getElementById('syncDot').className = 'sync-dot';
-        if (this.authed) this.render();
-      }
-    });
-  },
-
-  async saveAndRender() {
-    const err = await saveToDb(this.S);
-    if (err) {
-      document.getElementById('syncDot').className = 'sync-dot off';
-      alert('저장 실패: ' + err.message);
-    } else {
-      document.getElementById('syncDot').className = 'sync-dot';
-      if (this.authed) this.render();
+function fixedRows(s) {
+  const fixed = s.items.filter((i) => i.kind === 'fixed' && i.active);
+  return fixed.map((it) => {
+    const done = it.id in s.checks;
+    let amt = done ? s.checks[it.id] : it.amount;
+    let extra = '';
+    if (it.slug === 'food' && !done) {
+      amt = -meals * Math.round(Math.abs(it.amount) / 2);
+      extra = ` <select id="mealSel">${[2, 1, 0].map((n) => `<option value="${n}" ${meals === n ? 'selected' : ''}>${n}끼${n === 0 ? '(외식)' : ''}</option>`).join('')}</select>`;
     }
-  },
+    return `<div class="chk"><input type="checkbox" data-fix="${it.id}" ${done ? 'checked disabled' : (skipSel[it.id] ? '' : 'checked')}>` +
+      `<div class="t"><b>${esc(it.title)} <span style="color:${amt > 0 ? '#4ade80' : '#f87171'}">${fmt(amt)}</span></b><br><small>${esc(it.descr)}${done ? ' · ✅ 적용됨' : ''}</small></div>${extra}</div>`;
+  }).join('');
+}
 
-  unlock() {
-    if (document.getElementById('pw').value === this.S.pw) {
-      this.authed = true;
-      document.getElementById('lockCard').style.display = 'none';
-      document.getElementById('body').style.display = 'block';
-      this.render();
-    } else alert('비밀번호 틀림');
-  },
-  lock() { this.authed = false; document.getElementById('body').style.display = 'none'; document.getElementById('lockCard').style.display = 'block'; },
+function render(s) {
+  S = s;
+  if (s.day !== selDay) { selDay = s.day; skipSel = {}; meals = 2; } // 날짜를 바꾸면 선택값 초기화
+  const bal = s.family.balance;
+  const yest = addDays(s.today, -1);
+  const el = $('bal');
+  el.textContent = bal.toLocaleString() + 'P';
+  el.className = 'bal ' + (bal >= 0 ? 'plus' : 'minus');
+  $('status').textContent = s.status === 'bankrupt' ? '🚨 파산' : s.status === 'blocked' ? '⛔ 마이너스 차단 중' : '정상';
 
-  setDate(w) {
-    this.viewDate = w === 'y' ? C.addDays(C.todayStr(), -1) : C.todayStr();
-    document.getElementById('segY').className = w === 'y' ? 'on' : '';
-    document.getElementById('segT').className = w === 't' ? 'on' : '';
-    this.render();
-  },
-  pickDate(v) {
-    if (!v) return;
-    if (v > C.todayStr()) { alert('미래 날짜는 안 돼요'); this.render(); return; }
-    if (v < '2026-10-17') { alert('운영 시작일(10/17) 이전은 안 돼요'); this.render(); return; }
-    this.viewDate = v;
-    document.getElementById('segY').className = '';
-    document.getElementById('segT').className = '';
-    this.render();
-  },
+  $('segY').textContent = '어제 ' + fmtDate(yest);
+  $('segT').textContent = '오늘 ' + fmtDate(s.today);
+  $('segY').disabled = yest < s.start_date;
+  $('segY').className = s.day === yest ? 'on' : '';
+  $('segT').className = s.day === s.today ? 'on' : '';
+  const dp = $('datePick'); dp.min = s.start_date; dp.max = s.today; dp.value = s.day;
+  ['dateF', 'dateV', 'dateM'].forEach((id) => { $(id).textContent = '· ' + fmtDate(s.day); });
 
-  async applyToday() {
-    const skip = {};
-    C.FIXED.filter((x) => x.def).forEach((x) => {
-      const c = document.getElementById('fix_' + x.id);
-      if (c && !c.checked) skip[x.id] = true;
-    });
-    const mealsSel = document.getElementById('fix_food_meals');
-    const meals = mealsSel ? +mealsSel.value : 2;
-    const before = this.S.balance;
-    C.applyFixed(this.S, this.viewDate, { skip, meals });
-    await this.saveAndRender();
-    const diff = this.S.balance - before;
-    const applied = Object.keys(skip).length === 0 ? '모든 항목' : '선택 항목';
-    alert(C.fmtDate(this.viewDate) + ' ' + applied + ' 차감 완료 (' + Math.abs(diff).toLocaleString() + 'P).');
-  },
+  if (document.activeElement !== $('academy')) $('academy').value = s.family.academy_monthly;
+  $('acadNote').textContent = '일할: ' + Math.round(s.family.academy_monthly / 30).toLocaleString() + 'P/일';
 
-  approve(id, ok) {
-    const p = this.S.pending.find((x) => x.id === id); if (!p) return;
-    p.status = ok ? 'done' : 'reject';
-    if (ok) {
-      if (!this.S.daily[p.date]) this.S.daily[p.date] = {};
-      if (p.missionId) {
-        const mm = this.S.missions.find((x) => x.id === p.missionId);
-        if (mm) mm.status = 'done';
-        this.S.daily[p.date]['m' + p.missionId] = true;
-      } else if (p.itemId) {
-        this.S.daily[p.date][p.itemId] = true;
-      }
-      this.S.balance += p.amt; this.S.txs.unshift({ d: p.date, label: p.label, amt: p.amt, bal: this.S.balance });
-    } else if (p.missionId) {
-      const mm = this.S.missions.find((x) => x.id === p.missionId);
-      if (mm) mm.status = 'open';
-    }
-    this.saveAndRender();
-  },
-  createMission() {
-    const t = document.getElementById('mTitle').value.trim(), a = +document.getElementById('mAmt').value;
-    if (!t || !a) return alert('미션 내용과 포인트를 입력하세요');
-    C.addMission(this.S, this.viewDate, t, a);
-    document.getElementById('mTitle').value = ''; document.getElementById('mAmt').value = '';
-    this.saveAndRender();
-  },
-  delMission(id) {
-    if (!confirm('미션을 삭제할까요?')) return;
-    this.S.missions = this.S.missions.filter((x) => x.id !== id);
-    this.S.pending = this.S.pending.filter((x) => x.missionId !== id);
-    this.saveAndRender();
-  },
-  adjust(s) {
-    const a = +document.getElementById('amt').value, r = document.getElementById('reason').value || '수동 조정';
-    if (!a) return alert('금액 입력');
-    const amt = s * Math.abs(a);
-    this.S.balance += amt; this.S.txs.unshift({ d: C.todayStr(), label: '[관리자] ' + r, amt, bal: this.S.balance });
-    this.saveAndRender();
-  },
-  saveAcademy() { this.S.academy = +document.getElementById('academy').value || 0; this.saveAndRender(); },
-  savePw() { const v = document.getElementById('newPw').value; if (v) { this.S.pw = v; this.saveAndRender(); alert('변경됨'); } },
-  showCode() { document.getElementById('code').value = C.exportCode(this.S); },
-  doImport() {
-    try { this.S = C.importCode(document.getElementById('code').value); this.saveAndRender(); alert('가져오기 완료'); }
-    catch (e) { alert('코드 오류'); }
-  },
-  resetDay() { if (confirm(C.fmtDate(this.viewDate) + ' 체크만 초기화? (잔고 유지)')) { delete this.S.daily[this.viewDate]; this.saveAndRender(); } },
-  resetAll() { if (confirm('전체 초기화?')) { localStorage.removeItem('cc_v1'); location.reload(); } },
+  // 생활비 적용
+  const fixed = s.items.filter((i) => i.kind === 'fixed' && i.active);
+  const doneCount = fixed.filter((i) => i.id in s.checks).length;
+  $('fixList').innerHTML = fixedRows(s);
+  $('fixedNote').textContent = '적용 상태: ' + doneCount + '/' + fixed.length + ' 항목 적용됨';
+  $('applyBtn').disabled = doneCount === fixed.length;
 
-  render() {
-    if (!this.authed) return;
-    document.getElementById('segY').textContent = '어제 ' + C.fmtDate(C.addDays(C.todayStr(), -1));
-    document.getElementById('segT').textContent = '오늘 ' + C.fmtDate(C.todayStr());
-    document.getElementById('dateF').textContent = '· ' + C.fmtDate(this.viewDate);
-    document.getElementById('dateV').textContent = '· ' + C.fmtDate(this.viewDate);
-    document.getElementById('dateM').textContent = '· ' + C.fmtDate(this.viewDate);
-    const dp = document.getElementById('datePick'); dp.value = this.viewDate; dp.max = C.todayStr();
+  // 자녀 현황
+  const pills = s.items.filter((i) => i.active && i.kind !== 'spend').map((it) => {
+    const done = it.id in s.checks;
+    const pend = s.pending.some((p) => p.item_id === it.id && p.day === s.day);
+    return `<span class="pill">${done ? '✅' : pend ? '⏳' : '⬜'} ${esc(short(it.title))}</span>`;
+  }).join('') + s.missions.map((m) =>
+    `<span class="pill">${m.status === 'done' ? '✅' : m.status === 'wait' ? '⏳' : '⬜'} 미션: ${esc(m.title)}</span>`).join('');
+  $('todayView').innerHTML = pills;
 
-    const el = document.getElementById('bal');
-    el.textContent = this.S.balance.toLocaleString() + 'P';
-    el.className = 'bal ' + (this.S.balance >= 0 ? 'plus' : 'minus');
-    const st = C.statusOf(this.S.balance);
-    document.getElementById('status').innerHTML = st === 'bankrupt' ? '🚨 파산' : st === 'blocked' ? '⛔ 마이너스 차단 중' : '정상';
-    document.getElementById('academy').value = this.S.academy;
-    document.getElementById('acadNote').textContent = '일할: ' + C.acadDay(this.S).toLocaleString() + 'P/일';
+  // 승인 대기
+  $('pendCount').textContent = s.pending.length + '건';
+  $('approveList').innerHTML = s.pending.map((p) =>
+    `<div class="pending"><b>${esc(fmtDate(p.day))}</b> · ${esc(p.label)} (${fmt(p.amount)})` +
+    `<div class="row" style="margin-top:6px"><button class="btn small" data-decide="${p.id}" data-ok="1">승인·입금</button>` +
+    `<button class="btn small ghost" data-decide="${p.id}" data-ok="0">거절</button></div></div>`).join('')
+    || '<p class="note">대기 없음</p>';
 
-    const d = this.S.daily[this.viewDate] || {};
-    const fl = document.getElementById('fixList'); fl.innerHTML = '';
-    C.FIXED.filter((x) => x.def).forEach((x) => {
-      const done = !!d[x.id];
-      const amt = C.amtOf(this.S, x);
-      const row = document.createElement('div'); row.className = 'chk';
-      let extra = '';
-      if (x.id === 'food' && !done) extra = ` <select id="fix_food_meals"><option value="2">2끼</option><option value="1">1끼</option><option value="0">0끼(외식)</option></select>`;
-      row.innerHTML = `<input type="checkbox" id="fix_${x.id}" ${done ? 'checked disabled' : 'checked'}><div class="t"><b>${x.t} <span style="color:${amt > 0 ? '#4ade80' : '#f87171'}">${C.fmt(amt)}</span></b><br><small>${x.id === 'food' ? '끼니당 1,000P' : x.d}${done ? ' · ✅ 적용됨' : ''}</small></div>${extra}`;
-      fl.appendChild(row);
-    });
-    const allIds = C.FIXED.filter((x) => x.def).map((x) => x.id);
-    const doneCount = allIds.filter((id) => d[id]).length;
-    document.getElementById('fixedNote').textContent = '적용 상태: ' + doneCount + '/' + allIds.length + ' 항목 적용됨';
-    document.getElementById('applyBtn').disabled = doneCount === allIds.length;
+  // 미션
+  $('missionList').innerHTML = s.missions.map((m) =>
+    `<div class="pending">🎯 ${esc(m.title)} (${fmt(m.amount)}) · ${m.status === 'done' ? '✅ 완료' : m.status === 'wait' ? '⏳ 승인 대기' : '⬜ 진행중'} ` +
+    `<button class="btn small ghost" data-del-mission="${m.id}">삭제</button></div>`).join('')
+    || '<p class="note">이 날짜에 미션 없음</p>';
 
-    const items = [...C.FIXED.map((x) => ({ ...x, amt: C.amtOf(this.S, x) })), ...C.BASE, ...C.EXTRA];
-    let pills = items.map((x) => `<span class="pill">${d[x.id] ? '✅' : '⬜'} ${x.t}</span>`).join('');
-    pills += this.S.missions.filter((x) => x.date === this.viewDate).map((x) =>
-      `<span class="pill">${x.status === 'done' ? '✅' : x.status === 'wait' ? '⏳' : '⬜'} 미션: ${x.title}</span>`).join('');
-    document.getElementById('todayView').innerHTML = pills;
+  // 항목 편집 중에는 다시 그리지 않아 입력값이 날아가지 않게 함
+  const sig = JSON.stringify(s.items);
+  const editing = $('itemList').contains(document.activeElement);
+  if (sig !== itemsSig && !editing) { $('itemList').innerHTML = itemsHtml(s.items); itemsSig = sig; }
 
-    const waits = this.S.pending.filter((p) => p.status === 'wait');
-    document.getElementById('pendCount').textContent = waits.length + '건';
-    document.getElementById('approveList').innerHTML = waits.map((p) =>
-      `<div class="pending"><b>${C.fmtDate(p.date)}</b> · ${p.label} (+${p.amt.toLocaleString()}P)<div class="row" style="margin-top:6px"><button class="btn small" onclick="app.approve(${p.id},1)">승인·입금</button><button class="btn small ghost" onclick="app.approve(${p.id},0)">거절</button></div></div>`).join('') || '<p class="note">대기 없음</p>';
+  $('txBody').innerHTML = s.txs.slice(0, 100).map((t) =>
+    `<tr><td>${esc(fmtDate(t.day))}</td><td>${esc(t.label)}</td><td style="color:${t.amount > 0 ? '#4ade80' : '#f87171'};font-weight:700">${fmt(t.amount)}</td><td>${t.balance.toLocaleString()}P</td></tr>`).join('')
+    || '<tr><td colspan="4">내역 없음</td></tr>';
+}
 
-    document.getElementById('missionList').innerHTML = this.S.missions.filter((x) => x.date === this.viewDate).map((x) =>
-      `<div class="pending">🎯 ${x.title} (+${x.amt.toLocaleString()}P) · ${x.status === 'done' ? '✅ 완료' : x.status === 'wait' ? '⏳ 승인 대기' : '⬜ 진행중'} <button class="btn small ghost" onclick="app.delMission(${x.id})">삭제</button></div>`).join('') || '<p class="note">이 날짜에 미션 없음</p>';
-
-    document.getElementById('txBody').innerHTML = this.S.txs.slice(0, 100).map((t) =>
-      `<tr><td>${C.fmtDate(t.d)}</td><td>${t.label}</td><td style="color:${t.amt > 0 ? '#4ade80' : '#f87171'};font-weight:700">${C.fmt(t.amt)}</td><td>${t.bal.toLocaleString()}P</td></tr>`).join('') || '<tr><td colspan=4>내역 없음</td></tr>';
+// ----- 기기 연결 -----
+function seen(ts) {
+  if (!ts) return '아직 접속 기록 없음';
+  const m = Math.round((Date.now() - new Date(ts)) / 60000);
+  return m < 1 ? '방금 전 접속' : m < 60 ? m + '분 전 접속' : m < 1440 ? Math.round(m / 60) + '시간 전 접속' : Math.round(m / 1440) + '일 전 접속';
+}
+async function loadCreds() {
+  try {
+    const list = await rpc('list_credentials', { p_secret: getSecret() });
+    $('credList').innerHTML = list.filter((c) => !c.revoked).map((c) =>
+      `<div class="irow"><span style="flex:1">${c.role === 'parent' ? '👨‍👩‍👧' : '🧒'} <b>${esc(c.label)}</b>${c.is_me ? ' (이 기기)' : ''}<br><span class="note">${seen(c.last_seen_at)}</span></span>` +
+      (c.is_me ? '' : `<button class="btn small danger" data-revoke="${c.id}">연결 해제</button>`) + `</div>`).join('')
+      || '<p class="note">연결된 기기가 없어요</p>';
+  } catch (e) {
+    if (e.code === 'unauthorized') { clearSecret(); location.replace('index.html'); return; }
+    $('credList').innerHTML = '<p class="note">' + esc(errText(e)) + '</p>';
   }
-};
+}
+async function makeInvite(role) {
+  try {
+    const code = await rpc('issue_invite', { p_secret: getSecret(), p_role: role, p_label: $('invLabel').value.trim() });
+    const url = new URL('index.html', location.href);
+    url.hash = 'j=' + code;
+    $('linkText').value = url.href;
+    $('linkBox').style.display = 'block';
+    $('btnShare').style.display = navigator.share ? '' : 'none';
+    $('linkText').select();
+  } catch (e) { alert(errText(e)); }
+}
+async function copyLink() {
+  const t = $('linkText');
+  try { await navigator.clipboard.writeText(t.value); alert('복사했어요!'); }
+  catch (e) { t.select(); document.execCommand('copy'); alert('복사했어요!'); }
+}
 
-app.init();
+// ----- 버튼들 -----
+function pickDay(v) {
+  if (!v || !S) return;
+  if (v > S.today) { alert('미래 날짜는 안 돼요'); render(S); return; }
+  if (v < S.start_date) { alert('운영 시작일(' + fmtDate(S.start_date) + ') 이전은 안 돼요'); render(S); return; }
+  Sync.setDay(v === S.today ? null : v);
+}
+async function applyFixed() {
+  const fixed = S.items.filter((i) => i.kind === 'fixed' && i.active && !(i.id in S.checks));
+  const skip = fixed.filter((i) => skipSel[i.id]).map((i) => i.id);
+  const before = S.family.balance, day = S.day;
+  const ok = await Sync.act('apply_fixed', { p_skip: skip, p_meals: meals });
+  if (ok) {
+    const diff = Sync.state.family.balance - before;
+    alert(fmtDate(day) + ' ' + (skip.length ? '선택 항목' : '모든 항목') + ' 차감 완료 (' + Math.abs(diff).toLocaleString() + 'P).');
+  }
+}
+function adjust(sign) {
+  const a = parseInt($('amt').value, 10);
+  if (!a) return alert('금액을 입력하세요');
+  Sync.act('adjust', { p_amount: sign * Math.abs(a), p_reason: $('reason').value }).then((ok) => {
+    if (ok) { $('amt').value = ''; $('reason').value = ''; }
+  });
+}
+function saveItem(row) {
+  const it = S.items.find((x) => x.id === row.dataset.id);
+  if (!it) return;
+  const amt = parseInt(row.querySelector('.iamt').value, 10);
+  Sync.act('upsert_item', {
+    p_item: it.id, p_kind: it.kind, p_title: row.querySelector('.ititle').value, p_descr: null,
+    p_amount: it.slug === 'academy' ? it.amount : amt, p_active: row.querySelector('.iact').checked, p_survival: null,
+  }).then((ok) => {
+    if (ok) { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); itemsSig = ''; render(S); }
+  });
+}
+
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'datePick') pickDay(t.value);
+  else if (t.id === 'mealSel') { meals = +t.value; render(S); }
+  else if (t.matches && t.matches('[data-fix]')) skipSel[t.dataset.fix] = !t.checked;
+});
+document.addEventListener('click', (e) => {
+  const t = (sel) => e.target.closest(sel);
+  let b;
+  if ((b = t('[data-seg]'))) { if (S) Sync.setDay(b.dataset.seg === 'y' ? addDays(S.today, -1) : null); }
+  else if ((b = t('[data-decide]'))) {
+    if (b.dataset.ok === '0' && !confirm('이 요청을 거절할까요?')) return;
+    Sync.act('decide_request', { p_request: Number(b.dataset.decide), p_ok: b.dataset.ok === '1' });
+  } else if ((b = t('[data-del-mission]'))) {
+    if (confirm('미션을 삭제할까요? (대기 중인 신청도 함께 지워져요)')) Sync.act('delete_mission', { p_mission: Number(b.dataset.delMission) });
+  } else if ((b = t('[data-save-item]'))) saveItem(b.closest('.irow'));
+  else if ((b = t('[data-revoke]'))) {
+    if (confirm('이 기기의 연결을 해제할까요? 해제된 기기는 더 이상 접속할 수 없어요.'))
+      rpc('revoke_credential', { p_secret: getSecret(), p_id: b.dataset.revoke }).then(loadCreds).catch((er) => alert(errText(er)));
+  }
+});
+$('applyBtn').onclick = applyFixed;
+$('btnPlus').onclick = () => adjust(1);
+$('btnMinus').onclick = () => adjust(-1);
+$('btnMission').onclick = () => {
+  const title = $('mTitle').value.trim(), amt = parseInt($('mAmt').value, 10);
+  if (!title || !amt || amt <= 0) return alert('미션 내용과 포인트를 입력하세요');
+  Sync.act('create_mission', { p_title: title, p_amount: amt }).then((ok) => { if (ok) { $('mTitle').value = ''; $('mAmt').value = ''; } });
+};
+$('btnAcademy').onclick = () => {
+  const v = parseInt($('academy').value, 10);
+  if (isNaN(v) || v < 0) return alert('금액을 확인하세요');
+  Sync.act('set_academy', { p_monthly: v });
+};
+$('btnAddItem').onclick = () => {
+  const amt = parseInt($('newAmt').value, 10);
+  if (!$('newTitle').value.trim() || !amt) return alert('이름과 금액을 입력하세요');
+  Sync.act('upsert_item', {
+    p_item: null, p_kind: $('newKind').value, p_title: $('newTitle').value, p_descr: '',
+    p_amount: amt, p_active: true, p_survival: false,
+  }).then((ok) => { if (ok) { $('newTitle').value = ''; $('newAmt').value = ''; } });
+};
+$('btnInvChild').onclick = () => makeInvite('child').then(loadCreds);
+$('btnInvParent').onclick = () => makeInvite('parent').then(loadCreds);
+$('btnCopy').onclick = copyLink;
+$('btnShare').onclick = () => navigator.share({ title: '가정 내 자본주의', text: '연결 링크예요. 크롬/사파리에서 열어 주세요.', url: $('linkText').value }).catch(() => {});
+$('btnRecovery').onclick = () => {
+  const i = $('recoveryText');
+  if (i.style.display === 'none') { i.value = getSecret(); i.style.display = 'block'; $('btnRecovery').textContent = '복구 코드 숨기기'; i.select(); }
+  else { i.value = ''; i.style.display = 'none'; $('btnRecovery').textContent = '복구 코드 보기'; }
+};
+$('devBox').addEventListener('toggle', () => { if ($('devBox').open) loadCreds(); });
+$('btnResetDay').onclick = () => {
+  if (!S) return;
+  if (confirm(fmtDate(S.day) + ' 에 적용·체크된 항목을 모두 취소할까요?\n(낸 돈·받은 포인트도 함께 되돌아가요)')) Sync.act('reset_day');
+};
+$('btnResetAll').onclick = () => {
+  if (confirm('전체 초기화할까요? 잔고와 내역이 모두 지워져요.') && confirm('정말로요? 되돌릴 수 없어요.')) Sync.act('reset_all');
+};
+$('btnOut').onclick = () => { if (confirm('이 기기의 연결을 해제할까요?')) Sync.signOut(); };
+
+if (new URLSearchParams(location.search).has('welcome')) {
+  $('welcome').style.display = 'block';
+  $('devBox').open = true;
+}
+loadCreds();
+Sync.start('parent', render);
 </script>
 </body>
 </html>

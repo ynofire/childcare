@@ -9,19 +9,165 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#0f172a;color:#f1f5f9;font-family:Pretendard,system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px}
 .box{max-width:480px;width:100%;text-align:center}
-h1{font-size:24px;margin-bottom:6px}p{font-size:13px;color:#94a3b8;margin-bottom:20px;line-height:1.6}
-a{display:block;text-decoration:none;font-weight:800;font-size:18px;border-radius:16px;padding:22px;margin-top:12px}
-.kid{background:#38bdf8;color:#082f49}.par{background:#facc15;color:#111}
-small{display:block;font-weight:400;font-size:12px;margin-top:4px}
+h1{font-size:24px;margin-bottom:6px}
+p{font-size:13px;color:#94a3b8;margin-bottom:16px;line-height:1.6}
+.card{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:16px;margin-top:14px;text-align:left}
+.card h2{font-size:15px}.sub{font-size:12px;color:#94a3b8;margin:4px 0 10px;line-height:1.6}
+input,textarea{background:#0f172a;border:1px solid #334155;color:#fff;border-radius:8px;padding:10px;width:100%;font-size:14px;margin-top:8px}
+textarea{min-height:64px;font-size:12px}
+label.k{display:block;font-size:12px;color:#94a3b8;margin-top:10px}
+button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer;width:100%;margin-top:12px;font-size:15px}
+.btn{background:#facc15;color:#111}.btn.ghost{background:#334155;color:#fff}.btn.kid{background:#38bdf8;color:#082f49}
+.err{background:#450a0a;color:#fca5a5;border-radius:10px;padding:10px;font-size:13px;margin-top:12px;text-align:left}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:10px;color:#e2e8f0}.chk input{width:18px;margin-top:2px}
+details{margin-top:10px}summary{font-size:12px;color:#7dd3fc;cursor:pointer}
 </style>
 </head>
 <body>
-<div class="box">
-<h1>🏠 가정 내 자본주의</h1>
-<p>자립과 책임 트래킹 시스템<br>쓰는 사람이 맞는 문으로 들어가세요</p>
-<a class="kid" href="child.html">🧒 자녀 입장<small>내 자산 보기 · 앞가림 체크 · 심부름 신청 · 포인트 쓰기</small></a>
-<a class="par" href="parent.html">👨‍👩‍👧 부모 입장<small>승인 · 학원비 설정 · 벌금/보너스 · 전체 내역 (비밀번호 필요)</small></a>
-<p style="margin-top:16px">같은 PC·같은 브라우저면 데이터 자동 공유.<br>자녀 패드 따로 쓰면 각 앱의 "맞추기" 코드로 동기화.</p>
-</div>
+<div class="box" id="app"><h1>🏠 가정 내 자본주의</h1><p>연결 확인 중…</p></div>
+<script src="common.js"></script>
+<script>
+const app = document.getElementById('app');
+const $ = (id) => document.getElementById(id);
+
+function go(role) { location.replace(role === 'parent' ? 'parent.html' : 'child.html'); }
+function showMsg(t) { app.innerHTML = '<h1>🏠 가정 내 자본주의</h1><p>' + esc(t) + '</p>'; }
+
+// 이전 버전(이 브라우저 안에만 저장되던 데이터) 읽기
+function readLegacy() {
+  try { const s = JSON.parse(lsGet('cc_v1') || 'null'); if (s && typeof s.balance === 'number') return s; } catch (e) {}
+  return null;
+}
+function decodeLegacyCode(code) {
+  const S = JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
+  if (typeof S.balance !== 'number') throw new Error('bad');
+  return S;
+}
+
+function parseCode(text) {
+  const t = (text || '').trim();
+  let m = t.match(/[#&?]j=([0-9a-fA-F]{20,})/);
+  if (m) return { kind: 'invite', v: m[1].toLowerCase() };
+  m = t.match(/[0-9a-fA-F]{48}/);
+  if (m) return { kind: 'secret', v: m[0].toLowerCase() };
+  m = t.match(/[0-9a-fA-F]{24}/);
+  if (m) return { kind: 'invite', v: m[0].toLowerCase() };
+  return null;
+}
+
+function saved(secret) {
+  if (getSecret() !== secret) {
+    showSetup('이 브라우저는 저장소를 쓸 수 없어요. (사생활 보호/시크릿 모드라면 일반 창에서 열어 주세요)');
+    return false;
+  }
+  return true;
+}
+
+async function join(parsed) {
+  showMsg('연결 중…');
+  try {
+    if (parsed.kind === 'invite') {
+      const res = await rpc('redeem_invite', { p_code: parsed.v });
+      setSecret(res.secret);
+      if (saved(res.secret)) go(res.role);
+    } else {
+      const s = await rpc('get_state', { p_secret: parsed.v });
+      setSecret(parsed.v);
+      if (saved(parsed.v)) go(s.role);
+    }
+  } catch (e) {
+    showSetup(e.code === 'unauthorized' ? '코드가 올바르지 않아요.' : errText(e));
+  }
+}
+
+async function createFamily() {
+  const name = $('fname').value.trim() || '우리 가족';
+  const acad = Math.max(0, parseInt($('facad').value, 10) || 0);
+  let opening = 0;
+  const raw = $('legacyCode') ? $('legacyCode').value.trim() : '';
+  if (raw) {
+    try { opening = decodeLegacyCode(raw).balance; }
+    catch (e) { alert('이전 앱 데이터 코드가 올바르지 않아요. 비워두면 0P부터 시작해요.'); return; }
+  } else if ($('legacyUse') && $('legacyUse').checked) {
+    opening = (readLegacy() || {}).balance || 0;
+  }
+  $('btnCreate').disabled = true;
+  try {
+    const res = await rpc('create_family', { p_name: name, p_academy: acad, p_opening: opening });
+    setSecret(res.secret);
+    if (saved(res.secret)) location.replace('parent.html?welcome=1');
+  } catch (e) {
+    $('btnCreate').disabled = false;
+    alert(errText(e));
+  }
+}
+
+function showSetup(err) {
+  const legacy = readLegacy();
+  app.innerHTML = `
+    <h1>🏠 가정 내 자본주의</h1>
+    <p>자립과 책임 트래킹 시스템</p>
+    ${err ? '<div class="err">' + esc(err) + '</div>' : ''}
+    <div class="card">
+      <h2>🔗 연결 링크로 들어가기</h2>
+      <p class="sub">부모님이 보내준 링크를 열면 자동으로 연결돼요. 링크가 안 열리면 아래에 붙여넣으세요.</p>
+      <input id="code" placeholder="링크 또는 코드 붙여넣기" autocomplete="off">
+      <button class="btn kid" id="btnJoin">연결하기</button>
+    </div>
+    <div class="card">
+      <h2>👨‍👩‍👧 우리 집 새로 시작하기 (부모)</h2>
+      <p class="sub">처음 한 번만 하면 돼요. 만든 기기가 '부모 기기'가 되고, 아들·아내 폰은 링크로 연결해요.</p>
+      <label class="k">가족 이름</label>
+      <input id="fname" value="우리 가족" maxlength="30">
+      <label class="k">월 학원비 (원)</label>
+      <input id="facad" type="number" inputmode="numeric" value="${legacy && legacy.academy != null ? esc(legacy.academy) : 300000}">
+      ${legacy ? `<label class="chk"><input type="checkbox" id="legacyUse" checked><span>이 기기에 있는 이전 버전 포인트 이어받기 (잔고 ${legacy.balance.toLocaleString()}P)</span></label>` : ''}
+      <details>
+        <summary>다른 기기(아들 패드)의 이전 데이터를 이어받으려면</summary>
+        <p class="sub" style="margin-top:8px">이전 앱의 '맞추기' 탭 → '내 데이터 코드 보기'로 나온 코드를 붙여넣으세요. 잔고만 이어받아요.</p>
+        <textarea id="legacyCode" placeholder="이전 앱 데이터 코드 (선택)"></textarea>
+      </details>
+      <button class="btn" id="btnCreate">가족 만들기</button>
+    </div>`;
+  $('btnJoin').onclick = () => {
+    const p = parseCode($('code').value);
+    if (!p) { alert('링크나 코드를 확인해 주세요.'); return; }
+    join(p);
+  };
+  $('btnCreate').onclick = createFamily;
+}
+
+function showRetry(e) {
+  app.innerHTML = '<h1>🏠 가정 내 자본주의</h1><div class="err">' + esc(errText(e)) + '</div><button class="btn" id="retry">다시 시도</button>';
+  $('retry').onclick = route;
+}
+
+async function route() {
+  const secret = getSecret();
+  if (!secret) return showSetup();
+  let cached = null;
+  try { cached = JSON.parse(lsGet(CACHE_KEY) || 'null'); } catch (e) {}
+  if (cached && cached.role) return go(cached.role);
+  showMsg('연결 확인 중…');
+  try {
+    const s = await rpc('get_state', { p_secret: secret });
+    lsSet(CACHE_KEY, JSON.stringify(s));
+    go(s.role);
+  } catch (e) {
+    if (e.code === 'unauthorized') { clearSecret(); showSetup('이 기기의 연결이 해제돼 있어요. 새로 연결해 주세요.'); }
+    else showRetry(e);
+  }
+}
+
+(function main() {
+  const m = location.hash.match(/[#&]j=([0-9a-fA-F]{20,})/);
+  if (m) {
+    history.replaceState(null, '', location.pathname + location.search); // 주소창에서 초대 코드 지우기
+    join({ kind: 'invite', v: m[1].toLowerCase() });
+    return;
+  }
+  route();
+})();
+</script>
 </body>
 </html>
