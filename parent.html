@@ -34,6 +34,8 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 .chk{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--line);border-radius:10px;margin-top:6px;font-size:13px}
 .chk input{width:18px;height:18px;accent-color:var(--acc)}
 .chk .t{flex:1}.chk small{color:var(--mut)}
+.chk .amtbox{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--mut)}
+.chk input.amt{width:84px;height:32px;padding:0 6px;text-align:right;font-size:14px}
 .irow{display:flex;gap:6px;align-items:center;margin-top:6px}
 .irow .ititle{flex:2;min-width:0}.irow .iamt{flex:1;min-width:70px}
 .ichk{display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}.ichk input{width:auto}
@@ -60,7 +62,7 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
   <div class="row" style="margin-top:8px"><span style="font-size:12px;color:var(--mut)">📅 직접 선택 (주말 몰아 정산용)</span><span style="flex:1"><input type="date" id="datePick"></span></div>
 
   <div class="card"><h2>💸 생활비 차감 <span style="color:var(--mut)" id="dateF"></span></h2>
-    <p class="sub">나갈 돈만 체크하고 적용. 외박·수련회·외식은 해제. 주말에 학원 쉬면 학원비 해제. 날짜별로 항목당 1회씩 적용돼요.</p>
+    <p class="sub">나갈 돈만 체크하고 적용. 금액은 칸에서 직접 고칠 수 있어요. 외박·수련회·외식은 해제. 주말에 학원 쉬면 학원비 해제. 날짜별로 항목당 1회씩 적용돼요.</p>
     <div id="fixList"></div>
     <div class="row" style="margin-top:8px"><button class="btn" id="applyBtn">선택 항목 적용하기</button></div>
     <div class="note" id="fixedNote"></div></div>
@@ -119,7 +121,7 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 <script>
 const $ = (id) => document.getElementById(id);
 let S = null, itemsSig = '', selDay = null;
-let skipSel = {}, meals = 2; // 생활비 적용 화면의 선택값 (폴링으로 화면이 갱신돼도 유지)
+let skipSel = {}, meals = 2, amtSel = {}; // 생활비 적용 화면의 선택값 (폴링으로 화면이 갱신돼도 유지). amtSel = 직접 입력한 금액
 const KINDS = [
   ['fixed', '생활비 (부모가 날짜별로 적용)'], ['optional', '선택 차감 (자녀가 쓴 날 체크)'], ['base', '앞가림 (하면 +)'],
   ['extra', '심부름 (승인 후 +)'], ['spend', '쓰기 (자녀가 사용)'],
@@ -137,24 +139,37 @@ function itemsHtml(items) {
   }).join('');
 }
 
+// 항목별 기본 차감액(양수). 학원비는 월 학원비 일할, 식비는 끼니 수 × 끼니당 금액
+function defaultAmt(it, s) {
+  if (it.slug === 'academy') return Math.round(s.family.academy_monthly / 30);
+  if (it.slug === 'food') return meals * Math.round(Math.abs(it.amount) / 2);
+  return Math.abs(it.amount);
+}
 function fixedRows(s) {
   const fixed = s.items.filter((i) => i.kind === 'fixed' && i.active);
   return fixed.map((it) => {
     const done = it.id in s.checks;
-    let amt = done ? s.checks[it.id] : it.amount;
-    let extra = '';
-    if (it.slug === 'food' && !done) {
-      amt = -meals * Math.round(Math.abs(it.amount) / 2);
-      extra = ` <select id="mealSel">${[2, 1, 0].map((n) => `<option value="${n}" ${meals === n ? 'selected' : ''}>${n}끼${n === 0 ? '(외식)' : ''}</option>`).join('')}</select>`;
+    let extra = '', head;
+    if (done) {
+      const a = s.checks[it.id];
+      head = `<span style="color:${a > 0 ? '#4ade80' : '#f87171'}">${fmt(a)}</span>`;
+    } else {
+      const def = defaultAmt(it, s);
+      const cur = it.id in amtSel ? amtSel[it.id] : String(def);
+      head = `<span id="fh-${it.id}" style="color:#f87171">${fmt(-(parseInt(cur, 10) || 0))}</span>`;
+      if (it.slug === 'food') {
+        extra += ` <select id="mealSel">${[3, 2, 1, 0].map((n) => `<option value="${n}" ${meals === n ? 'selected' : ''}>${n}끼${n === 0 ? '(외식)' : ''}</option>`).join('')}</select>`;
+      }
+      extra += ` <span class="amtbox"><input class="amt" type="number" inputmode="numeric" min="0" step="100" data-amt="${it.id}" value="${esc(cur)}" aria-label="${esc(short(it.title))} 차감 금액">P</span>`;
     }
     return `<div class="chk"><input type="checkbox" data-fix="${it.id}" ${done ? 'checked disabled' : (skipSel[it.id] ? '' : 'checked')}>` +
-      `<div class="t"><b>${esc(it.title)} <span style="color:${amt > 0 ? '#4ade80' : '#f87171'}">${fmt(amt)}</span></b><br><small>${esc(it.descr)}${done ? ' · ✅ 적용됨' : ''}</small></div>${extra}</div>`;
+      `<div class="t"><b>${esc(it.title)} ${head}</b><br><small>${esc(it.descr)}${done ? ' · ✅ 적용됨' : ''}</small></div>${extra}</div>`;
   }).join('');
 }
 
 function render(s) {
   S = s;
-  if (s.day !== selDay) { selDay = s.day; skipSel = {}; meals = 2; } // 날짜를 바꾸면 선택값 초기화
+  if (s.day !== selDay) { selDay = s.day; skipSel = {}; meals = 2; amtSel = {}; } // 날짜를 바꾸면 선택값 초기화
   const bal = s.family.balance;
   const yest = addDays(s.today, -1);
   const el = $('bal');
@@ -176,7 +191,12 @@ function render(s) {
   // 생활비 적용
   const fixed = s.items.filter((i) => i.kind === 'fixed' && i.active);
   const doneCount = fixed.filter((i) => i.id in s.checks).length;
+  const ae = document.activeElement, keep = ae && ae.dataset && ae.dataset.amt ? { id: ae.dataset.amt, pos: ae.selectionStart } : null;
   $('fixList').innerHTML = fixedRows(s);
+  if (keep) { // 입력 중에 화면이 갱신돼도 커서 유지
+    const inp = document.querySelector('[data-amt="' + keep.id + '"]');
+    if (inp) { inp.focus(); try { inp.setSelectionRange(keep.pos, keep.pos); } catch (e) {} }
+  }
   $('fixedNote').textContent = '적용 상태: ' + doneCount + '/' + fixed.length + ' 항목 적용됨';
   $('applyBtn').disabled = doneCount === fixed.length;
 
@@ -258,8 +278,18 @@ function pickDay(v) {
 async function applyFixed() {
   const fixed = S.items.filter((i) => i.kind === 'fixed' && i.active && !(i.id in S.checks));
   const skip = fixed.filter((i) => skipSel[i.id]).map((i) => i.id);
+  const amounts = {};
+  for (const it of fixed) {
+    if (skipSel[it.id] || !(it.id in amtSel)) continue;
+    const raw = String(amtSel[it.id]).trim();
+    const v = Number(raw);
+    if (raw === '' || !Number.isInteger(v) || v < 0 || v > 10000000) {
+      alert('"' + short(it.title) + '" 금액을 0 이상의 정수로 입력해 주세요.'); return;
+    }
+    if (v !== defaultAmt(it, S)) amounts[it.id] = v; // 기본값과 같으면 서버 규칙대로
+  }
   const before = S.family.balance, day = S.day;
-  const ok = await Sync.act('apply_fixed', { p_skip: skip, p_meals: meals });
+  const ok = await Sync.act('apply_fixed', { p_skip: skip, p_meals: meals, p_amounts: amounts });
   if (ok) {
     const diff = Sync.state.family.balance - before;
     alert(fmtDate(day) + ' ' + (skip.length ? '선택 항목' : '모든 항목') + ' 차감 완료 (' + Math.abs(diff).toLocaleString() + 'P).');
@@ -284,10 +314,23 @@ function saveItem(row) {
   });
 }
 
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t.dataset && t.dataset.amt) {
+    amtSel[t.dataset.amt] = t.value;
+    const h = document.getElementById('fh-' + t.dataset.amt);
+    if (h) h.textContent = fmt(-(parseInt(t.value, 10) || 0));
+  }
+});
 document.addEventListener('change', (e) => {
   const t = e.target;
   if (t.id === 'datePick') pickDay(t.value);
-  else if (t.id === 'mealSel') { meals = +t.value; render(S); }
+  else if (t.id === 'mealSel') {
+    meals = +t.value;
+    const food = S.items.find((i) => i.kind === 'fixed' && i.slug === 'food');
+    if (food) delete amtSel[food.id]; // 끼니를 바꾸면 식비 금액은 다시 자동 계산
+    render(S);
+  }
   else if (t.matches && t.matches('[data-fix]')) skipSel[t.dataset.fix] = !t.checked;
 });
 document.addEventListener('click', (e) => {

@@ -395,24 +395,37 @@ begin
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
 end $$;
 
--- 부모: 해당 날짜 생활비(고정지출) 적용. p_skip = 제외할 항목 id 배열, p_meals = 식비 끼니 수
+-- 부모: 해당 날짜 생활비(고정지출) 적용.
+--   p_skip   = 제외할 항목 id 배열
+--   p_meals  = 식비 끼니 수 (0~3)
+--   p_amounts = 항목 id → 차감액(원, 양수) 직접 지정. 지정한 항목은 규칙 계산 대신 이 금액으로 차감
+drop function if exists public.apply_fixed(text, date, jsonb, integer); -- 이전 시그니처(업그레이드용, 새로 만들 땐 무시됨)
 create or replace function public.apply_fixed(
-  p_secret text, p_day date default null, p_skip jsonb default '[]'::jsonb, p_meals integer default 2)
+  p_secret text, p_day date default null, p_skip jsonb default '[]'::jsonb, p_meals integer default 2,
+  p_amounts jsonb default '{}'::jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   a record; f public.families%rowtype; d date; it record;
-  amt integer; lbl text; skip uuid[]; per integer;
+  amt integer; lbl text; skip uuid[]; per integer; ov jsonb; ovn numeric;
 begin
   select * into a from private.check_secret(p_secret, 'parent');
   select * into f from public.families where id = a.o_family for update;
   d := private.pick_day(f.id, p_day, true);
-  if p_meals is null or p_meals not between 0 and 6 then raise exception 'invalid'; end if;
+  if p_meals is null or p_meals not between 0 and 3 then raise exception 'invalid'; end if;
+  ov := coalesce(p_amounts, '{}'::jsonb);
+  if jsonb_typeof(ov) <> 'object' then raise exception 'invalid'; end if;
   skip := coalesce(array(select jsonb_array_elements_text(coalesce(p_skip, '[]'::jsonb))::uuid), '{}');
   for it in select * from public.items
              where family_id = f.id and kind = 'fixed' and active
              order by sort, created_at loop
     continue when it.id = any(skip);
-    if it.slug = 'academy' then
+    if ov ? it.id::text then
+      if jsonb_typeof(ov -> it.id::text) <> 'number' then raise exception 'invalid'; end if;
+      ovn := (ov ->> it.id::text)::numeric;
+      if ovn < 0 or ovn > 10000000 or ovn <> trunc(ovn) then raise exception 'invalid'; end if;
+      amt := -ovn::integer;
+      lbl := split_part(it.title, ' (', 1) || ' (직접 입력 ' || to_char(ovn::integer, 'FM999,999,999') || 'P)';
+    elsif it.slug = 'academy' then
       amt := -round(f.academy_monthly / 30.0)::integer;
       lbl := it.title || ' (' || to_char(amt, 'FM999,999,999') || 'P)';
     elsif it.slug = 'food' then
@@ -611,7 +624,7 @@ grant execute on function
   public.get_state(text, date), public.toggle_item(text, uuid, boolean, date),
   public.request_extra(text, uuid, date), public.request_mission(text, bigint, date),
   public.consume(text, uuid, date), public.decide_request(text, bigint, boolean, date),
-  public.apply_fixed(text, date, jsonb, integer), public.create_mission(text, text, integer, date),
+  public.apply_fixed(text, date, jsonb, integer, jsonb), public.create_mission(text, text, integer, date),
   public.delete_mission(text, bigint, date), public.adjust(text, integer, text, date),
   public.set_academy(text, integer, date),
   public.upsert_item(text, uuid, text, text, text, integer, boolean, boolean, date),
