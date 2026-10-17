@@ -29,7 +29,7 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
 function getSecret() { return lsGet(SECRET_KEY) || ''; }
 function setSecret(s) { lsDel(CACHE_KEY); lsSet(SECRET_KEY, s); }
-function clearSecret() { lsDel(SECRET_KEY); lsDel(CACHE_KEY); }
+function clearSecret() { lsDel(SECRET_KEY); lsDel(CACHE_KEY); lsDel('cc_pin_v2'); lsDel('cc_pin_fail'); } // 연결을 해제하면 이 기기의 화면 잠금도 함께 사라져요
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

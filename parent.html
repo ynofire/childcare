@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>관제센터 — 부모용</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script>
+// 화면 잠금(PIN)이 켜져 있으면 내용이 깜빡 보이지 않게 가장 먼저 가림
+try{if(localStorage.getItem('cc_pin_v2')&&sessionStorage.getItem('cc_unlocked')!=='1')document.documentElement.className='locked';}catch(e){}
+</script>
 <style>
 :root{--bg:#111827;--card:#1f2937;--line:#374151;--txt:#f9fafb;--mut:#9ca3af;--pos:#22c55e;--neg:#ef4444;--acc:#facc15}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -40,10 +44,28 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
 .irow .ititle{flex:2;min-width:0}.irow .iamt{flex:1;min-width:70px}
 .ichk{display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}.ichk input{width:auto}
 .welcome{background:#052e16;border:1px solid #166534;color:#bbf7d0;border-radius:16px;padding:14px;margin-top:12px;font-size:13px;line-height:1.7;display:none}
+html.locked header,html.locked main{display:none}
+#lock{display:none;position:fixed;inset:0;z-index:100;background:var(--bg);align-items:center;justify-content:center;padding:20px}
+html.locked #lock{display:flex}
+#lock .box{max-width:320px;width:100%;text-align:center}
+#lock h1{font-size:20px;margin-bottom:6px}
+#lock input{text-align:center;font-size:24px;letter-spacing:8px;margin-top:14px}
+#lock .err{color:#fca5a5;font-size:13px;min-height:20px;margin-top:10px}
+#lock button{width:100%;margin-top:10px}
+#lock .lnk{background:none;color:#7dd3fc;font-size:12px;font-weight:400;text-decoration:underline}
+.pinrow{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.pinrow input{flex:1;min-width:110px}
 .linkbox{display:none;margin-top:10px;background:#111827;border:1px solid var(--line);border-radius:10px;padding:10px}
 </style>
 </head>
 <body>
+<div id="lock"><div class="box">
+  <h1>🔒 부모 화면 잠금</h1>
+  <p class="sub">PIN을 입력하세요</p>
+  <input id="lockPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" aria-label="PIN">
+  <div class="err" id="lockErr"></div>
+  <button class="btn" id="lockBtn">열기</button>
+  <button class="lnk" id="lockForgot">PIN을 잊었어요</button>
+</div></div>
 <header>
   <div style="font-size:12px;color:#fdba74">👨‍👩‍👧 관제센터 (부모용) · 잔고는 누적 합계</div>
   <div class="row" style="justify-content:space-between">
@@ -110,6 +132,14 @@ td,th{padding:8px;border-bottom:1px solid var(--line);text-align:left}
     <div class="row" style="margin-top:8px"><button class="btn ghost small" id="btnRecovery">복구 코드 보기</button></div>
     <input id="recoveryText" readonly style="display:none;margin-top:8px;font-size:12px">
   </details></div>
+
+  <div class="card"><h2>🔒 화면 잠금 (PIN) <span class="pill" id="pinState">꺼짐</span></h2>
+    <p class="sub">이 폰에서 부모 화면을 열 때 PIN을 물어요. 아들이 부모 폰을 집어도 열 수 없어요. 기기마다 따로 설정해요. (4~6자리 숫자)</p>
+    <div class="pinrow" id="pinCur" style="display:none"><input id="pinOld" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="현재 PIN" autocomplete="off"></div>
+    <div class="pinrow"><input id="pinNew" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="새 PIN" autocomplete="off"><input id="pinNew2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="새 PIN 확인" autocomplete="off"></div>
+    <div class="row" style="margin-top:10px"><button class="btn small" id="pinSave">PIN 설정</button><button class="btn ghost small" id="pinOff" style="display:none">잠금 끄기</button></div>
+    <div class="note" id="pinMsg">PIN을 잊으면 이 기기를 연결 해제하고 복구 코드로 다시 연결해야 해요.</div>
+  </div>
 
   <div class="card"><h2>🧨 초기화</h2>
     <div class="row" style="margin-top:8px"><button class="btn ghost small" id="btnResetDay">이 날짜 체크 초기화</button><button class="btn danger small" id="btnResetAll">전체 초기화</button></div>
@@ -392,6 +422,89 @@ if (new URLSearchParams(location.search).has('welcome')) {
   $('welcome').style.display = 'block';
   $('devBox').open = true;
 }
+// ----- 화면 잠금 (PIN) -----
+// 이 기기에서만 동작하는 '화면 잠금'이에요. 서버 권한은 기기 열쇠가 지켜요. PIN 은 솔트+PBKDF2 해시로만 저장돼요.
+const PIN_KEY = 'cc_pin_v2', FAIL_KEY = 'cc_pin_fail', RELOCK_MS = 60000;
+const canCrypto = !!(window.crypto && crypto.subtle && window.TextEncoder);
+const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+const fromHex = (h) => new Uint8Array(h.match(/../g).map((x) => parseInt(x, 16)));
+async function pinHash(pin, saltHex) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  return toHex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: fromHex(saltHex), iterations: 100000, hash: 'SHA-256' }, key, 256));
+}
+function getPin() { try { return JSON.parse(lsGet(PIN_KEY) || 'null'); } catch (e) { return null; } }
+function sessGet() { try { return sessionStorage.getItem('cc_unlocked') === '1'; } catch (e) { return false; } }
+function sessSet(v) { try { if (v) sessionStorage.setItem('cc_unlocked', '1'); else sessionStorage.removeItem('cc_unlocked'); } catch (e) {} }
+function getFail() { try { return JSON.parse(lsGet(FAIL_KEY) || '{"n":0,"until":0}'); } catch (e) { return { n: 0, until: 0 }; } }
+function validPin(v) { return /^[0-9]{4,6}$/.test(v); }
+function setLocked(on) {
+  document.documentElement.className = on ? 'locked' : '';
+  if (on) { $('lockPin').value = ''; $('lockErr').textContent = ''; setTimeout(() => $('lockPin').focus(), 50); }
+}
+function lockNow() { if (getPin()) { sessSet(false); setLocked(true); } }
+async function tryUnlock() {
+  const rec = getPin(); if (!rec) { setLocked(false); return; }
+  const f = getFail(), now = Date.now();
+  if (f.until > now) { $('lockErr').textContent = Math.ceil((f.until - now) / 1000) + '초 후에 다시 시도하세요.'; return; }
+  const v = $('lockPin').value.trim();
+  if (!validPin(v)) { $('lockErr').textContent = '4~6자리 숫자를 입력하세요.'; return; }
+  let h = ''; try { h = await pinHash(v, rec.s); } catch (e) {}
+  if (h && h === rec.h) { lsDel(FAIL_KEY); sessSet(true); setLocked(false); return; }
+  const n = f.n + 1, wait = n % 5 === 0 ? Math.min(600, 30 * Math.pow(2, n / 5 - 1)) * 1000 : 0; // 5번 틀릴 때마다 30초, 60초, 120초…
+  lsSet(FAIL_KEY, JSON.stringify({ n, until: wait ? now + wait : 0 }));
+  $('lockPin').value = '';
+  $('lockErr').textContent = wait ? 'PIN이 여러 번 틀렸어요. ' + Math.round(wait / 1000) + '초 후에 다시 시도하세요.' : 'PIN이 맞지 않아요. (' + (5 - (n % 5)) + '번 더 틀리면 잠시 막혀요)';
+}
+function refreshPinCard() {
+  const on = !!getPin();
+  $('pinState').textContent = on ? '켜짐' : '꺼짐';
+  $('pinCur').style.display = on ? 'flex' : 'none';
+  $('pinOff').style.display = on ? '' : 'none';
+  $('pinSave').textContent = on ? 'PIN 변경' : 'PIN 설정';
+  $('pinNew').placeholder = on ? '새 PIN' : 'PIN (4~6자리)';
+  if (!canCrypto) { $('pinSave').disabled = true; $('pinMsg').textContent = '이 브라우저에서는 화면 잠금을 쓸 수 없어요. (https 주소로 열어 주세요)'; }
+}
+async function savePin() {
+  const msg = $('pinMsg'), cur = getPin();
+  if (cur) {
+    let h = ''; try { h = await pinHash($('pinOld').value.trim(), cur.s); } catch (e) {}
+    if (!h || h !== cur.h) { msg.textContent = '현재 PIN이 맞지 않아요.'; return; }
+  }
+  const a = $('pinNew').value.trim(), b = $('pinNew2').value.trim();
+  if (!validPin(a)) { msg.textContent = 'PIN은 4~6자리 숫자예요.'; return; }
+  if (a !== b) { msg.textContent = '새 PIN 두 칸이 달라요.'; return; }
+  const salt = toHex(crypto.getRandomValues(new Uint8Array(16)));
+  lsSet(PIN_KEY, JSON.stringify({ s: salt, h: await pinHash(a, salt) }));
+  if (!getPin()) { msg.textContent = '이 브라우저는 저장소를 쓸 수 없어서 잠금을 켤 수 없어요.'; return; }
+  lsDel(FAIL_KEY); sessSet(true);
+  ['pinOld', 'pinNew', 'pinNew2'].forEach((id) => { $(id).value = ''; });
+  msg.textContent = cur ? '✅ PIN을 바꿨어요.' : '✅ 화면 잠금을 켰어요. 앱을 닫거나 1분 이상 다른 화면에 있다 오면 PIN을 물어요.';
+  refreshPinCard();
+}
+async function offPin() {
+  const cur = getPin(); if (!cur) return;
+  let h = ''; try { h = await pinHash($('pinOld').value.trim(), cur.s); } catch (e) {}
+  if (!h || h !== cur.h) { $('pinMsg').textContent = '현재 PIN을 입력해야 끌 수 있어요.'; return; }
+  lsDel(PIN_KEY); lsDel(FAIL_KEY); sessSet(false);
+  $('pinOld').value = ''; $('pinMsg').textContent = '화면 잠금을 껐어요.';
+  refreshPinCard();
+}
+$('lockBtn').onclick = tryUnlock;
+$('lockPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(); });
+$('lockForgot').onclick = () => {
+  if (!confirm('PIN을 잊으셨나요?\n이 기기의 연결을 해제하고, 복구 코드나 새 링크로 다시 연결해야 해요.')) return;
+  clearSecret(); sessSet(false); location.replace('index.html');
+};
+$('pinSave').onclick = savePin;
+$('pinOff').onclick = offPin;
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (hiddenAt && Date.now() - hiddenAt >= RELOCK_MS) lockNow();
+});
+refreshPinCard();
+if (getPin() && !sessGet()) setLocked(true);
+
 loadCreds();
 Sync.start('parent', render);
 </script>
