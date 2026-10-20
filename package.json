@@ -1,0 +1,16 @@
+{
+  "name": "childcare",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "가정 내 자본주의 — 가족 용돈·집안일 포인트 앱",
+  "scripts": {
+    "test:sql": "bash test/run-sql.sh",
+    "test:unit": "node --test test/unit/",
+    "test:e2e": "node --test --test-concurrency=1 test/e2e/",
+    "test": "npm run test:sql && npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "pg": "^8.23.1"
+  }
+}
