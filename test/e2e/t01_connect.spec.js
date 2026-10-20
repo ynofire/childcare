@@ -17,8 +17,12 @@ test('t01 가족 만들기 → 연결 코드 → 아들 연결, 재사용·오�
 
   const parentSecret = await w.secretOf(parent);
   assert.match(parentSecret, /^[0-9a-f]{48}$/);
-  const code = await w.rpc('issue_invite', { p_secret: parentSecret, p_role: 'child', p_label: '아들폰' });
-  assert.match(code, /^[A-HJKMNP-Z2-9]{8}$/);
+  await parent.locator('[data-tab="settings"]').click();
+  await parent.locator('#invLabel').fill('아들폰');
+  await parent.locator('#btnInvite').click();
+  const shown = (await parent.locator('[data-invite-code]').innerText()).trim();
+  assert.match(shown, /^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
+  const code = shown.replace('-', '');
 
   await child.goto(w.url + '/');
   const sloppy = ` ${code.slice(0, 4).toLowerCase()}-${code.slice(4).toLowerCase()} `;

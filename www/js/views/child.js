@@ -2,6 +2,7 @@
 // 카드는 체크박스가 아니라 '상태 카드'다. 상태는 cardState(서버 상태 + 큐)에서만 계산되고, 누르면 의도를 큐에 넣을 뿐이다.
 import { cardState, pendingKey } from '../cardstate.js';
 import { storage, SECRET_KEY } from '../storage.js';
+import { dayBar as dayBarView } from './daybar.js';
 
 const SEEN_KEY = 'cc_seen_v1';
 const STATE_LABEL = { todo: '', sending: '보내는 중…', waiting: '승인 대기', done: '완료', rejected: '거절됨 · 다시 하기', locked: '지금은 못 해요' };
@@ -76,22 +77,6 @@ export function mount(root, { store, ui, rpc, reboot }) {
     : null;
 
   // ---- 오늘 탭 ----
-  function dayBar(s) {
-    const yest = addDays(s.today, -1);
-    const canY = yest >= s.start_date;
-    const other = s.day !== s.today && s.day !== yest;
-    const pick = h('input', { type: 'date', class: 'daypick', id: 'dayPick', value: s.day, min: s.start_date, max: s.today, 'aria-label': '날짜 고르기' });
-    pick.addEventListener('change', () => {
-      const v = pick.value;
-      if (!v || v < s.start_date || v > s.today) return;
-      store.setDay(v === s.today ? null : v);
-    });
-    return h('div', { class: 'seg' },
-      h('button', { id: 'segY', 'data-seg': 'y', type: 'button', class: 'seg-b' + (s.day === yest ? ' on' : ''), disabled: !canY, onclick: () => store.setDay(yest) }, '어제 ', fmtDate(yest)),
-      h('button', { id: 'segT', 'data-seg': 't', type: 'button', class: 'seg-b' + (s.day === s.today ? ' on' : ''), onclick: () => store.setDay(null) }, '오늘 ', fmtDate(s.today)),
-      h('label', { class: 'seg-b pick' + (other ? ' on' : '') }, other ? fmtDate(s.day) : '날짜', pick));
-  }
-
   function statusNote(s) {
     if (s.status === 'bankrupt') return h('div', { class: 'status-note bankrupt', 'data-status-note': 'bankrupt' }, '파산 상태예요. 부모님과 이야기해서 다시 시작해 보세요. 지금은 할 수 있는 게 없어요.');
     if (s.status === 'blocked') return h('div', { class: 'status-note blocked', 'data-status-note': 'blocked' }, '잔고가 마이너스예요. 앞가림을 해서 먼저 플러스로 만들어요. (선택 차감과 쓰기는 잠겨요)');
@@ -137,7 +122,7 @@ export function mount(root, { store, ui, rpc, reboot }) {
     const ms = (s.missions || []).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done') || a.id - b.id);
     return [
       statusNote(s),
-      dayBar(s),
+      dayBarView(s, store, ui),
       section('missions', '시킨 일', '날짜와 상관없이 남아 있어요', ms.map((m) => card('mission', { id: m.id, title: m.title, amount: m.amount, descr: '' }, s, pending, { isNew: isNew(m) }))),
       section('base', '앞가림', '했으면 눌러요', of('base').map((i) => card('base', i, s, pending))),
       section('extra', '심부름', '하고 눌러서 신청해요', of('extra').map((i) => card('extra', i, s, pending))),

@@ -19,9 +19,20 @@ export function mountConnect(root, { rpc, ui, onConnected, notice }) {
     if (storage.getItem(SECRET_KEY) !== secret) throw Object.assign(new Error('storage'), { code: 'error' });
   }
 
-  const code = h('input', { id: 'code', class: 'input code-input', placeholder: 'ABCD-EFGH', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', maxlength: '20', 'aria-label': '연결 코드' });
+  const code = h('input', { id: 'code', class: 'input code-input', placeholder: 'ABCD-EFGH', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', maxlength: '64', 'aria-label': '연결 코드' });
   const btnJoin = h('button', { id: 'btnJoin', class: 'btn kid', type: 'button' }, '연결하기');
   btnJoin.onclick = () => {
+    // 부모 복구 코드(열쇠 48자리)면 그대로 이어서 연결한다
+    const recovery = code.value.trim();
+    if (/^[0-9a-f]{48}$/i.test(recovery)) {
+      run(btnJoin, async () => {
+        const secret = recovery.toLowerCase();
+        await rpc('get_state', { p_secret: secret }); // 틀린 코드면 unauthorized 로 던진다
+        keep(secret);
+        onConnected();
+      });
+      return;
+    }
     const norm = normalizeCode(code.value);
     if (norm.length !== 8) { toast('연결 코드는 8글자예요. 부모님 화면의 코드를 확인해 주세요.', 'err'); return; }
     run(btnJoin, async () => {
@@ -51,7 +62,7 @@ export function mountConnect(root, { rpc, ui, onConnected, notice }) {
     notice ? h('div', { class: 'notice' }, notice) : null,
     h('section', { class: 'card' },
       h('h2', {}, '연결 코드로 들어가기'),
-      h('p', { class: 'muted' }, '부모님 앱의 설정에서 만든 코드를 입력하세요. 30분 안에 한 번만 쓸 수 있어요.'),
+      h('p', { class: 'muted' }, '부모님 앱의 설정에서 만든 코드를 입력하세요. 30분 안에 한 번만 쓸 수 있어요. (부모 복구 코드도 여기에 넣어요)'),
       code, btnJoin),
     h('section', { class: 'card' },
       h('h2', {}, '우리 집 새로 시작하기'),

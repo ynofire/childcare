@@ -10,8 +10,12 @@ after(async () => { await w.teardown(); });
 test('t02 어제 날짜로 낸 미션이 아들 오늘 화면에 5초 안에 NEW 와 함께 뜨고, 날짜를 바꿔도 남는다', async () => {
   const { child } = w;
   await child.locator('[data-tab="today"]').waitFor();
-  const yesterday = w.addDays(w.kstToday(), -1);
-  await w.rpc('create_mission', { p_secret: keys.parentSecret, p_title: '베란다 대청소', p_amount: 20000, p_day: yesterday });
+    // 부모가 어제 날짜를 보면서 UI 로 미션을 낸다
+  await w.parent.locator('[data-seg="y"]').click();
+  await w.parent.locator('#segY.on').waitFor();
+  await w.parent.locator('#mTitle').fill('베란다 대청소');
+  await w.parent.locator('#mAmt').fill('20000');
+  await w.parent.locator('#btnMission').click();
 
   const card = child.locator('[data-section="missions"] [data-card]', { hasText: '베란다 대청소' });
   await card.waitFor({ timeout: 7000 });

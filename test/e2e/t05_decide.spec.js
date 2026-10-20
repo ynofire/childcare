@@ -16,7 +16,7 @@ test('t05a 요청 → 부모 승인 → 아들 카드 done(도장) + 잔고 증�
   await card.click();
   await child.locator(`[data-card="${it.dish.id}"][data-state="waiting"]`).waitFor();
   const r = await pendingOf(it.dish.id);
-  await w.rpc('decide_request', { p_secret: keys.parentSecret, p_request: r.id, p_ok: true });
+  await w.parent.locator(`[data-decide="${r.id}"][data-ok="1"]`).click();
   await child.locator(`[data-card="${it.dish.id}"][data-state="done"]`).waitFor();
   await child.locator(`[data-card="${it.dish.id}"] .stamp`).waitFor();
   assert.equal(await bal(), it.dish.amount);
@@ -28,7 +28,7 @@ test('t05b 거절 → rejected(다시 하기) → 다시 요청하면 waiting', 
   await child.locator(`[data-card="${it.trash.id}"]`).click();
   await child.locator(`[data-card="${it.trash.id}"][data-state="waiting"]`).waitFor();
   const r = await pendingOf(it.trash.id);
-  await w.rpc('decide_request', { p_secret: keys.parentSecret, p_request: r.id, p_ok: false });
+  await w.parent.locator(`[data-decide="${r.id}"][data-ok="0"]`).click();
   const card = child.locator(`[data-card="${it.trash.id}"][data-state="rejected"]`);
   await card.waitFor();
   assert.match(await card.innerText(), /다시 하기/);
