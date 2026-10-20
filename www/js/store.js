@@ -7,7 +7,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export function createStore({ rpc, storage, pollMs = 5000, retryMs = 2000, env } = {}) {
   const doc = (env && env.doc) || globalThis.document;
   const win = (env && env.win) || globalThis.window;
-  let state = null, online = true, day = null;
+  let state = null, online = true, day = null, lastSyncAt = null;
   let seq = 0, applied = 0, entrySeq = 0;
   let queue = [], running = false, stopped = false, refreshing = null, timer = null;
   const listeners = new Set();
@@ -31,6 +31,7 @@ export function createStore({ rpc, storage, pollMs = 5000, retryMs = 2000, env }
   function apply(id, s) {
     if (id < applied) return false;
     applied = id;
+    lastSyncAt = Date.now();
     const roleChanged = !!(state && s && state.role && s.role && state.role !== s.role);
     state = s;
     notify({ roleChanged });
@@ -138,6 +139,7 @@ export function createStore({ rpc, storage, pollMs = 5000, retryMs = 2000, env }
     get state() { return state; },
     get online() { return online; },
     get day() { return day; },
+    get lastSyncAt() { return lastSyncAt; },
     get pending() { return new Set(queue.map(keyOf)); },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     start, stop, refresh, setDay, act, signOutLocal,

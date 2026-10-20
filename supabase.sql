@@ -210,7 +210,7 @@ begin
     'recent', coalesce((
       select jsonb_agg(jsonb_build_object('id', r.id, 'item_id', r.item_id, 'mission_id', r.mission_id,
                                           'label', r.label, 'amount', r.amount, 'status', r.status,
-                                          'decided_at', r.decided_at) order by r.decided_at desc, r.id desc)
+                                          'day', r.day, 'decided_at', r.decided_at) order by r.decided_at desc, r.id desc)
         from (select * from public.requests
                where family_id = f.id and status in ('done', 'reject') and decided_at > now() - interval '2 days'
                order by decided_at desc, id desc limit 20) r), '[]'::jsonb),

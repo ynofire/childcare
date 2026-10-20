@@ -90,5 +90,5 @@ export function tabBar(tabs, current, onSelect, badges = {}) {
     },
     h('span', { class: 'tab-ico', 'aria-hidden': 'true' }, t.icon),
     h('span', { class: 'tab-label' }, t.label),
-    badges[t.id] ? h('span', { class: 'tab-badge', 'data-badge': t.id === 'today' ? 'new' : 'count' }, String(badges[t.id])) : null)));
+    badges[t.id] ? h('span', { class: 'tab-badge', 'data-tab-badge': t.id }, String(badges[t.id])) : null)));
 }

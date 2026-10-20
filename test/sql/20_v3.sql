@@ -45,6 +45,7 @@ begin
   assert s->'recent'->0->>'status' = 'reject' and (s->'recent'->0->>'item_id')::uuid = trash, 'r1 최신은 거절된 심부름';
   assert exists (select 1 from jsonb_array_elements(s->'recent') x where (x->>'item_id')::uuid = dish and x->>'status' = 'done'), 'r1 승인 건 포함';
   assert (s->'recent'->0) ? 'decided_at' and (s->'recent'->0) ? 'label' and (s->'recent'->0) ? 'amount', 'r1 필드';
+  assert (s->'recent'->0->>'day')::date = t, 'r1 요청 날짜(day) 포함';
   update public.requests set decided_at = now() - interval '3 days' where family_id = fid and status in ('done','reject');
   assert jsonb_array_length(public.get_state(c)->'recent') = 0, 'r1 3일 지난 처리 건은 빠짐';
 

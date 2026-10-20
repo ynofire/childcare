@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const PG = { host: '/tmp/pgtest_cc', port: 5544, user: 'postgres', database: 'cc' };
 export const SECRET_KEY = 'cc_secret_v2';
 
-export async function newWorld({ viewport = { width: 390, height: 844 } } = {}) {
+export async function newWorld({ viewport = { width: 390, height: 844 }, pollMs = 600 } = {}) {
   execFileSync('bash', ['test/run-sql.sh', 'up'], { cwd: ROOT, stdio: 'pipe' });
   const shim = await startShim({ pg: PG, wwwDir: path.join(ROOT, 'www') });
   const browser = await chromium.launch();
@@ -18,7 +18,7 @@ export async function newWorld({ viewport = { width: 390, height: 844 } } = {}) 
 
   async function newPhone(name = 'phone') {
     const ctx = await browser.newContext({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2, locale: 'ko-KR' });
-    await ctx.addInitScript('window.__CC_API__ = location.origin;');
+    await ctx.addInitScript(`window.__CC_API__ = location.origin; window.__CC_POLL_MS__ = ${pollMs};`);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(`[${name}] ${e.message}`));
     page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`[${name}] console: ${m.text()}`); });
@@ -33,6 +33,14 @@ export async function newWorld({ viewport = { width: 390, height: 844 } } = {}) 
     const body = await res.json().catch(() => null);
     if (!res.ok) throw Object.assign(new Error(body && body.message), { code: body && body.message, status: res.status });
     return body;
+  }
+  // 날짜 도우미 (서버 '오늘'과 같은 한국 시간 기준)
+  const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const addDays = (ds, n) => new Date(Date.parse(ds + 'T00:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
+  // 슬러그 → 항목 (부모 열쇠로 서버 상태를 읽어 id 를 얻는다)
+  async function items(parentSecret) {
+    const st = await rpc('get_state', { p_secret: parentSecret });
+    return Object.fromEntries(st.items.map((i) => [i.slug || i.title, i]));
   }
   const secretOf = (page) => page.evaluate((k) => localStorage.getItem(k), SECRET_KEY);
 
@@ -50,7 +58,7 @@ export async function newWorld({ viewport = { width: 390, height: 844 } } = {}) 
   }
 
   return {
-    url: shim.url, shim, rpc, errors, secretOf, seedFamily, newPhone,
+    url: shim.url, shim, rpc, errors, secretOf, seedFamily, newPhone, kstToday, addDays, items,
     parent: p.page, child: c.page,
     setFakeToday: (d) => shim.setFakeToday(d),
     async teardown() {

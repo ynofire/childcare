@@ -160,3 +160,15 @@ test('s10 시작·복귀·네트워크 복구·포커스·주기마다 즉시 �
   assert.equal(gets(), frozen, '숨겨진 동안은 갱신하지 않음');
   store.stop();
 });
+
+test('s11 lastSyncAt 은 서버 응답을 반영한 시각이고, 실패한 갱신에선 바뀌지 않는다', async () => {
+  let fail = false;
+  const { store } = mk({ handler: () => { if (fail) throw offlineErr(); return { role: 'child' }; } });
+  assert.equal(store.lastSyncAt, null);
+  const t0 = Date.now();
+  await store.refresh();
+  assert.ok(store.lastSyncAt >= t0 && store.lastSyncAt <= Date.now());
+  const first = store.lastSyncAt;
+  fail = true; await wait(5); await store.refresh();
+  assert.equal(store.lastSyncAt, first);
+});
