@@ -7,6 +7,7 @@ export function dayBar(s, store, ui) {
   const pick = h('input', { type: 'date', class: 'daypick', id: 'dayPick', value: s.day, min: s.start_date, max: s.today, 'aria-label': '날짜 고르기' });
   pick.addEventListener('change', () => {
     const v = pick.value;
+    pick.blur(); // 선택이 끝났으니 밀려 있던 화면 갱신을 바로 반영
     if (!v) return;
     if (v > s.today) { toast('미래 날짜는 고를 수 없어요.', 'err'); return; }
     if (v < s.start_date) { toast('운영 시작일(' + fmtDate(s.start_date) + ') 이전은 고를 수 없어요.', 'err'); return; }

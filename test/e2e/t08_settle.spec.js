@@ -63,3 +63,19 @@ test('t08b 소수·빈 값·음수는 시트로 안내하고 서버에 보내지
   assert.equal(await parent.locator(`[data-amt="${it.rent.id}"]`).inputValue(), '777');
   assert.deepEqual(w.errors, []);
 });
+
+test('t08c 선택창(끼니 선택)이 열려 있는 동안엔 폴링이 화면을 다시 그리지 않는다 (안드로이드 선택창이 닫히는 문제 방지)', async () => {
+  const { parent } = w;
+  await parent.locator('[data-tab="settle"]').click();
+  await parent.locator('#segY').click();
+  await parent.locator('#segY.on').waitFor();
+  const sel = parent.locator('#mealSel');
+  await parent.waitForTimeout(800); // 날짜 전환 직후의 갱신이 끝나길 기다린다
+  await sel.focus();
+  const handle = await sel.elementHandle();
+  await w.rpc('create_mission', { p_secret: keys.parentSecret, p_title: '폴링 확인', p_amount: 1000 });
+  await parent.waitForTimeout(1600); // 폴링 주기(600ms)보다 충분히 길게
+  assert.equal(await handle.evaluate((n) => n.isConnected), true, '포커스된 선택창은 그대로 남아 있다');
+  await sel.blur();
+  await parent.waitForFunction((n) => !n.isConnected, handle, { timeout: 3000 }); // 닫으면 밀린 갱신이 반영된다
+});

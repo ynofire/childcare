@@ -3,6 +3,7 @@
 #   bash test/run-sql.sh          # DB 기동 → 스키마 로드 → 시나리오 실행 → 종료
 #   bash test/run-sql.sh up       # DB 기동 + 스키마 로드만 (E2E 용, 켜 둔 채로 둠)
 #   bash test/run-sql.sh down     # DB 종료·삭제
+#   SCHEMA_SQL=옛.sql UPGRADE_SQL=upgrade_v3.sql bash test/run-sql.sh   # 옛 DB 위에 업그레이드를 얹어도 시나리오가 통과하는지
 # 각 시나리오는 마지막에 `raise exception '<NAME>_OK'` 로 성공을 알린다(롤백 목적).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,7 +24,9 @@ pg_up() {
   "${PSQL[@]}" -d cc -c "create schema extensions; create extension pgcrypto with schema extensions;" || return 1
   # Supabase 가 기본 제공하는 역할을 흉내낸다 (역할은 클러스터 전역이라 새 클러스터에서만 만들면 됨)
   "${PSQL[@]}" -d postgres -c "create role anon nologin; create role authenticated nologin;" || return 1
-  "${PSQL[@]}" -d cc -f "$ROOT/supabase.sql" >/dev/null || return 1
+  "${PSQL[@]}" -d cc -f "${SCHEMA_SQL:-$ROOT/supabase.sql}" >/dev/null || return 1
+  # 업그레이드 검증: 옛 스키마(SCHEMA_SQL) 위에 UPGRADE_SQL 을 얹은 뒤 같은 시나리오를 돌린다
+  if [ -n "${UPGRADE_SQL:-}" ]; then "${PSQL[@]}" -d cc -f "$UPGRADE_SQL" >/dev/null || return 1; fi
   "${PSQL[@]}" -d cc -f "$ROOT/test/sql/00_helpers.sql" || return 1
 }
 

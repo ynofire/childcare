@@ -67,8 +67,19 @@ export function confirmSheet(msg, { okText = '확인', cancelText = '취소', da
 }
 
 // 다시 그리기: 입력 중인 칸(data-k)의 포커스·커서와 스크롤 위치를 지킨다.
-export function rerender(container, build) {
+// 네이티브 선택창(select·날짜)이 열려 있는 동안 폴링으로 DOM 을 갈아끼우면 안드로이드에서 선택창이 닫힌다 →
+// 그동안은 미루고, 닫혀서 blur 되면 그때 반영한다. 사용자가 직접 일으킨 다시 그리기는 { force: true } 로 바로 그린다.
+const isNativePicker = (el) => el && (el.tagName === 'SELECT' || (el.tagName === 'INPUT' && el.type === 'date'));
+export function rerender(container, build, { force = false } = {}) {
   const ae = document.activeElement;
+  if (!force && container.contains(ae) && isNativePicker(ae)) {
+    container.__latestBuild = build;
+    if (!container.__deferred) {
+      container.__deferred = true;
+      ae.addEventListener('blur', () => { container.__deferred = false; rerender(container, container.__latestBuild); }, { once: true });
+    }
+    return;
+  }
   const keep = ae && container.contains(ae) && ae.dataset && ae.dataset.k
     ? { k: ae.dataset.k, s: ae.selectionStart, e: ae.selectionEnd } : null;
   const y = window.scrollY;

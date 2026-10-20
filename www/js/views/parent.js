@@ -20,7 +20,7 @@ export function mount(root, { store, ui, rpc, errText, reboot }) {
 
   const ctx = {
     store, ui, rpc, errText, reboot, lock, drafts,
-    draw: () => draw(),
+    draw: () => draw(true), // 사용자가 직접 일으킨 다시 그리기
     // 입력칸: 값은 drafts.v[key] 에 보관, data-k 로 다시 그린 뒤에도 포커스를 되찾는다
     input(key, attrs = {}) {
       return h('input', { class: 'input', 'data-k': key, value: drafts.v[key] ?? attrs.def ?? '', ...attrs, def: null,
@@ -74,12 +74,12 @@ export function mount(root, { store, ui, rpc, errText, reboot }) {
     ];
   }
 
-  function draw() {
+  function draw(force = false) {
     if (!store.state) return;
     if (composing) { dirty = true; return; }
     // 잠금 화면은 한 번만 그린다 (폴링으로 다시 그리면 입력 중인 PIN 이 지워진다)
     if (lock.isLocked()) { if (lockShown) return; lockShown = true; drafts.lockMsg = drafts.lockMsg || ''; } else lockShown = false;
-    rerender(root, build);
+    rerender(root, build, { force });
   }
   const onCompStart = () => { composing = true; };
   const onCompEnd = () => { composing = false; if (dirty) { dirty = false; draw(); } };
@@ -91,7 +91,7 @@ export function mount(root, { store, ui, rpc, errText, reboot }) {
   window.addEventListener('cc:pause', onPause);
   window.addEventListener('cc:resume', onResume);
 
-  const off = store.subscribe(() => draw());
+  const off = store.subscribe(() => draw(false));
   draw();
   return () => { off(); root.removeEventListener('compositionstart', onCompStart); root.removeEventListener('compositionend', onCompEnd); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('cc:pause', onPause); window.removeEventListener('cc:resume', onResume); };
 }
