@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # ubuntu-latest 가 26 으로 바뀌는 중이라 Android 도구가 검증된 24.04 로 고정
     timeout-minutes: 30
     env:
       APP_VERSION_CODE: ${{ github.run_number }}
@@ -43,6 +43,15 @@ jobs:
           java-version: 17
 
       - uses: android-actions/setup-android@v3
+        continue-on-error: true   # 실패해도 러너에 미리 깔린 Android SDK 로 이어간다
+
+      - name: Android SDK 라이선스 동의 (미리 깔린 SDK 사용)
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK"
+          SM="$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)"
+          if [ -n "$SM" ]; then yes | "$SM" --licenses >/dev/null 2>&1 || true; fi
+          echo "sdk.dir=$SDK" > android/local.properties
 
       - name: 웹 파일을 안드로이드 프로젝트로 복사
         run: npx cap sync android
