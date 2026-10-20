@@ -77,17 +77,34 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then
-            ./gradlew --no-daemon assembleRelease
+          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then TASK=assembleRelease; else TASK=assembleDebug; fi
+          set +e
+          ./gradlew --no-daemon --stacktrace "$TASK" > ../gradle-build.log 2>&1
+          RC=$?
+          set -e
+          if [ "$RC" -ne 0 ]; then
+            # 실패 원인을 Annotations 에 요약해서 보여준다 (로그를 열지 않아도 확인 가능)
+            MSG="$(grep -n -A14 -E 'What went wrong|FAILURE:' ../gradle-build.log | head -40 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')"
+            echo "::error title=Gradle 실패::${MSG:-$(tail -25 ../gradle-build.log | sed ':a;N;$!ba;s/\n/%0A/g')}"
+            exit "$RC"
+          fi
+          if [ "$TASK" = "assembleRelease" ]; then
             cp app/build/outputs/apk/release/app-release.apk "../childcare-v${APP_VERSION_CODE}.apk"
           else
-            ./gradlew --no-daemon assembleDebug
             cp app/build/outputs/apk/debug/app-debug.apk "../childcare-v${APP_VERSION_CODE}-debug.apk"
           fi
 
       - name: 서명 키 파일 지우기
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: 빌드 로그 보관
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log-${{ github.run_number }}
+          path: gradle-build.log
+          if-no-files-found: ignore
 
       - name: APK 보관 (Actions > 실행 > Artifacts)
         uses: actions/upload-artifact@v4
