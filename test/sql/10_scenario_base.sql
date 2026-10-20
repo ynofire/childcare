@@ -56,38 +56,40 @@ begin
 
   -- 7. 파산 상태 규칙 + 보너스로 복구
   select id into iid from public.items where family_id=fid and slug='school';
-  begin perform public.toggle_item(c, iid, true, y); assert false, '07 파산인데 앞가림 체크됨'; exception when others then assert sqlerrm = 'bankrupt', '07 '||sqlerrm; end;
+  begin perform public.request_item(c, iid, y); assert false, '07 파산인데 앞가림 신청됨'; exception when others then assert sqlerrm = 'bankrupt', '07 '||sqlerrm; end;
   s := public.adjust(p, 100000, '보너스');
   assert (s->'family'->>'balance')::int = 49000, '07 보너스 후 49000';
 
-  -- 8. 자녀: 어제 앞가림/패드
-  s := public.toggle_item(c, iid, true, y);
-  assert (s->'family'->>'balance')::int = 59000 and s->>'day' = y::text, '08 어제 앞가림 +10000';
+  -- 8. 자녀: 어제 앞가림/패드 — 신청 후 부모가 승인해야 반영
+  s := public.request_item(c, iid, y);
+  assert (s->'family'->>'balance')::int = 49000 and jsonb_array_length(s->'pending') = 1, '08 신청만으로는 잔고 불변';
+  s := public.decide_request(p, (s->'pending'->0->>'id')::bigint, true, y);
+  assert (s->'family'->>'balance')::int = 59000 and s->>'day' = y::text, '08 어제 앞가림 승인 +10000';
   assert (select day from public.txs where family_id=fid and label='공부하기 (학교·숙제·주말 공부 포함)') = y, '08 내역 날짜 어제';
-  s := public.toggle_item(c, iid, true, y);
-  assert (s->'family'->>'balance')::int = 59000, '08b 중복 체크 무시';
-  s := public.toggle_item(c, iid, false, y);
-  assert (s->'family'->>'balance')::int = 49000, '08c 체크 해제 시 회수';
-  s := public.toggle_item(c, iid, true, y);
+  begin perform public.request_item(c, iid, y); assert false, '08b 이미 한 날 재신청'; exception when others then assert sqlerrm = 'duplicate', '08b '||sqlerrm; end;
   select id into iid from public.items where family_id=fid and slug='pad';
-  s := public.toggle_item(c, iid, true);
-  assert (s->'family'->>'balance')::int = 57000, '08d 오늘 패드 -2000';
-  begin perform public.toggle_item(c, iid, true, t+1); assert false, '08e 미래 날짜 체크됨'; exception when others then assert sqlerrm = 'invalid_day', '08e '||sqlerrm; end;
+  s := public.request_item(c, iid);
+  s := public.decide_request(p, (s->'pending'->0->>'id')::bigint, true);
+  assert (s->'family'->>'balance')::int = 57000, '08d 오늘 패드 승인 -2000';
+  begin perform public.request_item(c, iid, t+1); assert false, '08e 미래 날짜 신청됨'; exception when others then assert sqlerrm = 'invalid_day', '08e '||sqlerrm; end;
 
   -- 9. 심부름: 어제 날짜로 신청 → 승인 시 어제 기록
   select id into iid from public.items where family_id=fid and slug='dish';
   s := public.request_extra(c, iid, y);
   assert jsonb_array_length(s->'pending') = 1 and (s->'pending'->0->>'day') = y::text, '09 신청 1건(어제)';
   s := public.request_extra(c, iid, y);
-  assert jsonb_array_length(s->'pending') = 1, '09b 중복 신청 무시';
+  assert jsonb_array_length(s->'pending') = 2, '09b (v4) 같은 날 여러 번 신청 가능';
+  s := public.decide_request(p, (s->'pending'->0->>'id')::bigint, false);
   rid := (s->'pending'->0->>'id')::bigint;
   begin perform public.decide_request(c, rid, true); assert false, '09c 자녀가 승인함'; exception when others then assert sqlerrm = 'forbidden', '09c '||sqlerrm; end;
   s := public.decide_request(p, rid, true);
   assert (s->'family'->>'balance')::int = 67000, '09d 승인 +10000';
   assert (select day from public.txs where family_id=fid and label='설거지 완벽 클리어') = y, '09d 내역 날짜 어제';
-  assert exists (select 1 from public.checks where family_id=fid and day=y and item_id=iid), '09d 어제 체크 기록';
+  assert (public.get_state(c, y)->'done_counts'->>iid::text)::int = 1, '09d 어제 완료 횟수 1';
   begin perform public.decide_request(p, rid, true); assert false, '09e 중복 승인'; exception when others then assert sqlerrm = 'invalid', '09e '||sqlerrm; end;
-  begin perform public.request_extra(c, iid, y); assert false, '09f 이미 입금된 날 재신청'; exception when others then assert sqlerrm = 'duplicate', '09f '||sqlerrm; end;
+  s := public.request_extra(c, iid, y);
+  assert jsonb_array_length(s->'pending') = 1, '09f (v4) 이미 한 날에도 또 신청 가능';
+  perform public.decide_request(p, (s->'pending'->0->>'id')::bigint, false);
 
   -- 10. 미션
   begin perform public.create_mission(c, '해킹', 100); assert false, '10 자녀가 미션 생성'; exception when others then assert sqlerrm = 'forbidden', '10 '||sqlerrm; end;
@@ -119,13 +121,16 @@ begin
 
   -- 11. 쓰기
   select id into iid from public.items where family_id=fid and slug='pc1';
-  s := public.consume(c, iid);
-  assert (s->'family'->>'balance')::int = b + 20000 - 10000, '11 PC 1시간 -10000';
-  begin perform public.consume(p, iid); assert false, '11b 부모가 consume'; exception when others then assert sqlerrm = 'forbidden', '11b '||sqlerrm; end;
+  s := public.request_item(c, iid);
+  assert (s->'family'->>'balance')::int = b + 20000, '11 신청만으로는 차감 안 됨';
+  s := public.decide_request(p, (s->'pending'->0->>'id')::bigint, true);
+  assert (s->'family'->>'balance')::int = b + 20000 - 10000, '11 PC 1시간 승인 -10000';
+  begin perform public.request_item(p, iid); assert false, '11b 부모가 신청'; exception when others then assert sqlerrm = 'forbidden', '11b '||sqlerrm; end;
 
   -- 12. 날짜 초기화: 어제 체크를 전부 되돌리고 잔고도 맞춰짐
   b := (select balance from public.families where id=fid);
-  n := (select coalesce(sum(amount),0) from public.checks where family_id=fid and day=y);
+  n := (select coalesce(sum(amount),0) from public.checks where family_id=fid and day=y)
+     + (select coalesce(sum(r.amount),0) from public.requests r join public.items i on i.id = r.item_id where r.family_id=fid and r.day=y and r.status='done' and i.kind='extra');
   s := public.reset_day(p, y);
   assert (s->'family'->>'balance')::int = b - n, '12 초기화 후 잔고 = '||(b-n)||' 실제 '||(s->'family'->>'balance');
   assert (select count(*) from public.checks where family_id=fid and day=y) = 0, '12 어제 체크 비어있음';

@@ -1,17 +1,21 @@
 // 아들 화면: 오늘(할 일 카드) · 내역 · 설정.
-// 카드는 체크박스가 아니라 '상태 카드'다. 상태는 cardState(서버 상태 + 큐)에서만 계산되고, 누르면 의도를 큐에 넣을 뿐이다.
-import { cardState, pendingKey } from '../cardstate.js';
+// 카드는 체크박스가 아니라 '상태 카드'다. 상태는 cardState(서버 상태 + 큐)에서만 계산되고, 누르면 '신청'을 큐에 넣을 뿐이다.
+// 아이가 하는 모든 일(앞가림·패드·심부름·미션·포인트 쓰기)은 신청이고, 부모가 승인해야 잔고에 반영된다.
+import { cardState, pendingKey, repKey, repInfo } from '../cardstate.js';
 import { storage, SECRET_KEY } from '../storage.js';
 import { dayBar as dayBarView } from './daybar.js';
 
 const SEEN_KEY = 'cc_seen_v1';
-const STATE_LABEL = { todo: '', sending: '보내는 중…', waiting: '승인 대기', done: '완료', rejected: '거절됨 · 다시 하기', locked: '지금은 못 해요' };
+const STATE_LABEL = { todo: '', sending: '보내는 중…', waiting: '승인 대기', done: '승인됨', rejected: '거절됨 · 다시 하기', locked: '지금은 못 해요' };
+const REP_TAP_GAP_MS = 700; // 반복 항목을 실수로 두 번 눌러도 한 번만 신청되게
 
 export function mount(root, { store, ui, rpc, reboot }) {
   const { h, tabBar, rerender, fmt, money, addDays, fmtDate, shortTitle, toast, haptic, confirmSheet } = ui;
   let tab = 'today';
-  const intent = new Map();   // 앞가림 카드: 보내는 중에 다시 누르면 의도를 뒤집는다 (id → 마지막 의도)
   let prevStates = new Map(); // 카드별 직전 상태 (승인·거절 알림용)
+  let prevDay = null;
+  let tapSeq = 0;
+  const lastTap = new Map();  // 반복 항목 id → 마지막으로 누른 시각
   let seenMax = null;
 
   // ---- 새 미션(NEW) 표시 ----
@@ -35,30 +39,40 @@ export function mount(root, { store, ui, rpc, reboot }) {
   window.addEventListener('pagehide', markSeen);
 
   // ---- 카드 ----
+  // 심부름·쓰기: 누를 때마다 새 신청 (하루 여러 번). 큐에서 합쳐지지 않도록 매번 다른 키를 쓴다.
+  function requestRep(it) {
+    const now = Date.now();
+    if (now - (lastTap.get(it.id) || 0) < REP_TAP_GAP_MS) return Promise.resolve({ ok: false, code: 'ignored' });
+    if (repInfo(it.kind, it.id, store.state, store.pending).locked) return Promise.resolve({ ok: false, code: 'locked' });
+    lastTap.set(it.id, now);
+    return store.act('request_item', { p_item: it.id }, { key: repKey(it.id, ++tapSeq) });
+  }
+
   function tapCard(kind, it, state) {
     haptic();
     const id = it.id;
-    if (kind === 'base' || kind === 'optional') {
-      if (state === 'locked') return;
-      let on;
-      if (state === 'sending') { if (!intent.has(id)) return; on = !intent.get(id); }
-      else on = state !== 'done';
-      intent.set(id, on);
-      store.act('toggle_item', { p_item: id, p_on: on }, { key: pendingKey(kind, id) });
-      return;
-    }
+    if (kind === 'extra') { requestRep({ ...it, kind: 'extra' }); return; }
     if (state !== 'todo' && state !== 'rejected') return;
-    if (kind === 'extra') store.act('request_extra', { p_item: id }, { key: pendingKey('extra', id) });
-    else store.act('request_mission', { p_mission: id }, { key: pendingKey('mission', id) });
+    if (kind === 'mission') store.act('request_mission', { p_mission: id }, { key: pendingKey('mission', id) });
+    else store.act('request_item', { p_item: id }, { key: pendingKey(kind, id) });
+  }
+
+  function repLabel(r) {
+    const parts = [];
+    if (r.sending) parts.push('보내는 중…');
+    if (r.waiting) parts.push('승인 대기 ' + r.waiting);
+    if (r.done) parts.push('완료 ' + r.done + '번');
+    return parts.length ? parts.join(' · ') : (r.locked ? '지금은 못 해요' : '');
   }
 
   function card(kind, it, s, pending, extra) {
     const state = cardState(kind, it.id, s, pending);
     const amount = Number(it.amount);
-    const label = STATE_LABEL[state];
+    const rep = kind === 'extra' ? repInfo(kind, it.id, s, pending) : null;
+    const label = rep ? repLabel(rep) : STATE_LABEL[state];
     return h('button', {
       class: 'task ' + kind, type: 'button', 'data-card': it.id, 'data-state': state,
-      'aria-disabled': state === 'locked' ? 'true' : null,
+      'aria-disabled': (rep ? rep.locked : state === 'locked') ? 'true' : null,
       onclick: () => tapCard(kind, it, state),
     },
     h('span', { class: 'task-main' },
@@ -68,8 +82,7 @@ export function mount(root, { store, ui, rpc, reboot }) {
     h('span', { class: 'task-side' },
       h('span', { class: 't-amt ' + (amount < 0 ? 'neg' : 'pos') }, fmt(amount)),
       label ? h('span', { class: 't-state' }, label) : null),
-    state === 'done' && (kind === 'extra' || kind === 'mission') ? h('span', { class: 'stamp', 'aria-hidden': 'true' }, '승인') : null,
-    state === 'done' && (kind === 'base' || kind === 'optional') ? h('span', { class: 'tick', 'aria-hidden': 'true' }, '✓') : null);
+    state === 'done' && !rep ? h('span', { class: 'stamp', 'aria-hidden': 'true' }, '승인') : null);
   }
 
   const section = (key, title, hint, cards) => cards.length
@@ -85,22 +98,25 @@ export function mount(root, { store, ui, rpc, reboot }) {
 
   function spendBtn(it, s) {
     const amt = Number(it.amount);
+    const r = repInfo('spend', it.id, s, store.pending);
     let reason = '';
-    if (s.day !== s.today) reason = '';
-    else if (s.status !== 'ok') reason = s.status === 'bankrupt' ? '파산 상태라 쓸 수 없어요' : '마이너스라 쓸 수 없어요';
-    else if (s.family.balance < -amt) reason = '포인트가 모자라요';
+    if (s.status !== 'ok') reason = s.status === 'bankrupt' ? '파산 상태라 쓸 수 없어요' : '마이너스라 쓸 수 없어요';
+    else if (r.locked) reason = '포인트가 모자라요';
+    const note = [];
+    if (r.sending + r.waiting) note.push('승인 대기 ' + (r.sending + r.waiting));
+    if (r.done) note.push('오늘 ' + r.done + '번 사용');
     return h('div', { class: 'spend-row' },
       h('button', {
         class: 'spend', type: 'button', 'data-spend': it.id, disabled: !!reason,
         onclick: async () => {
           haptic();
-          const ok = await confirmSheet(`${shortTitle(it.title)} — ${money(-amt)}P를 쓸까요?`, { okText: '쓰기' });
+          const ok = await confirmSheet(`${shortTitle(it.title)} — ${money(-amt)}P를 쓸까요? (부모님이 승인하면 차감돼요)`, { okText: '신청' });
           if (!ok) return;
-          const r = await store.act('consume', { p_item: it.id });
-          if (r.ok) toast(`${shortTitle(it.title)} 사용! ${fmt(amt)}`, 'ok');
+          const res = await requestRep({ ...it, kind: 'spend' });
+          if (res.ok) toast(`${shortTitle(it.title)} 신청했어요. 부모님 승인을 기다려요.`, 'ok');
         },
       }, h('span', { class: 't-title' }, shortTitle(it.title)), h('span', { class: 't-amt neg' }, fmt(amt))),
-      reason ? h('span', { class: 'reason' }, reason) : null);
+      reason ? h('span', { class: 'reason' }, reason) : (note.length ? h('span', { class: 'rep-note', 'data-spend-note': it.id }, note.join(' · ')) : null));
   }
 
   function fixedCard(s, fixed) {
@@ -124,10 +140,10 @@ export function mount(root, { store, ui, rpc, reboot }) {
       statusNote(s),
       dayBarView(s, store, ui),
       section('missions', '시킨 일', '날짜와 상관없이 남아 있어요', ms.map((m) => card('mission', { id: m.id, title: m.title, amount: m.amount, descr: '' }, s, pending, { isNew: isNew(m) }))),
-      section('base', '앞가림', '했으면 눌러요', of('base').map((i) => card('base', i, s, pending))),
-      section('extra', '심부름', '하고 눌러서 신청해요', of('extra').map((i) => card('extra', i, s, pending))),
-      section('optional', '내가 고르는 것', null, of('optional').map((i) => card('optional', i, s, pending))),
-      s.day === s.today ? section('spend', '포인트 쓰기', null, of('spend').map((i) => spendBtn(i, s))) : null,
+      section('base', '앞가림', '했으면 눌러서 신청해요', of('base').map((i) => card('base', i, s, pending))),
+      section('extra', '심부름', '여러 번 할 수 있어요', of('extra').map((i) => card('extra', i, s, pending))),
+      section('optional', '내가 고르는 것', '쓴 날만 신청해요', of('optional').map((i) => card('optional', i, s, pending))),
+      s.day === s.today ? section('spend', '포인트 쓰기', '신청하면 승인 후 차감돼요', of('spend').map((i) => spendBtn(i, s))) : null,
       fixedCard(s, of('fixed')),
     ];
   }
@@ -158,7 +174,8 @@ export function mount(root, { store, ui, rpc, reboot }) {
         h('h2', {}, s.family.name),
         h('div', { class: 'kv' }, h('span', {}, '연결 상태'), h('b', { 'data-conn': store.online ? 'on' : 'off' }, store.online ? '연결됨' : '끊김 (다시 연결 중)')),
         h('div', { class: 'kv' }, h('span', {}, '마지막 동기화'), h('b', {}, hhmm)),
-        h('div', { class: 'kv' }, h('span', {}, '운영 시작일'), h('b', {}, fmtDate(s.start_date)))),
+        h('div', { class: 'kv' }, h('span', {}, '운영 시작일'), h('b', {}, fmtDate(s.start_date))),
+        h('div', { class: 'kv' }, h('span', {}, '앱 버전'), h('b', { id: 'appVer' }, document.documentElement.dataset.build ? 'v' + document.documentElement.dataset.build : '웹'))),
       h('section', { class: 'card' },
         h('h2', {}, '이 기기 연결 끊기'),
         h('p', { class: 'muted' }, '끊으면 이 폰에서는 장부를 볼 수 없어요. 다시 쓰려면 부모님께 새 코드를 받아야 해요.'),
@@ -188,26 +205,41 @@ export function mount(root, { store, ui, rpc, reboot }) {
     ];
   }
 
-  // 승인/거절 알림: 대기 중이던 카드가 바뀌면 한 번 알려준다
+  // 승인/거절 알림: 대기 중이던 카드가 바뀌면 한 번 알려준다 (보고 있는 날짜가 바뀐 때는 건너뜀)
   function announce(s) {
     const pending = store.pending;
     const next = new Map();
-    const note = (kind, id, title) => {
+    const sameDay = prevDay === s.day;
+    const approved = (t) => { toast(`${t} 승인됐어요!`, 'ok'); haptic(); };
+    const rejected = (t) => toast(`${t} 거절됐어요. 다시 해볼 수 있어요.`, 'err');
+    const one = (kind, id, title) => {
       const key = kind + ':' + id, st = cardState(kind, id, s, pending);
       next.set(key, st);
       const was = prevStates.get(key);
-      if (was === 'waiting' && st === 'done') { toast(`${title} 승인됐어요!`, 'ok'); haptic(); }
-      else if (was === 'waiting' && st === 'rejected') toast(`${title} 거절됐어요. 다시 해볼 수 있어요.`, 'err');
+      if (!sameDay) return;
+      if (was === 'waiting' && st === 'done') approved(title);
+      else if (was === 'waiting' && st === 'rejected') rejected(title);
     };
-    for (const i of s.items || []) if (i.kind === 'extra') note('extra', i.id, shortTitle(i.title));
-    for (const m of s.missions || []) note('mission', m.id, m.title);
+    const many = (kind, id, title) => {
+      const r = repInfo(kind, id, s, pending), key = kind + ':' + id, was = prevStates.get(key);
+      next.set(key, { w: r.waiting, d: r.done });
+      if (!sameDay || !was || typeof was === 'string') return;
+      const dd = Math.max(0, r.done - was.d), gone = Math.max(0, was.w - r.waiting);
+      if (dd > 0) approved(title);
+      if (gone - dd > 0) rejected(title);
+    };
+    for (const i of s.items || []) {
+      if (i.kind === 'extra' || i.kind === 'spend') many(i.kind, i.id, shortTitle(i.title));
+      else if (i.kind === 'base' || i.kind === 'optional') one(i.kind, i.id, shortTitle(i.title));
+    }
+    for (const m of s.missions || []) one('mission', m.id, m.title);
     prevStates = next;
+    prevDay = s.day;
   }
 
   const draw = () => { if (store.state) rerender(root, build); };
   const off = store.subscribe((s) => {
     if (!s) return;
-    for (const id of [...intent.keys()]) if (!store.pending.has(pendingKey('base', id)) && !store.pending.has(pendingKey('optional', id))) intent.delete(id);
     announce(s);
     draw();
   });

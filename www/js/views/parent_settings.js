@@ -111,6 +111,11 @@ export function settingsTab(ctx, s) {
         pinOn ? h('button', { id: 'pinOff', class: 'btn ghost', type: 'button', onclick: offPin }, '잠금 끄기') : null),
       h('div', { id: 'pinMsg', class: 'pin-msg muted', role: 'status' }, drafts.pinMsg || 'PIN을 잊으면 이 기기의 연결을 해제하고 복구 코드로 다시 연결해야 해요.')),
 
+    h('section', { class: 'card' },
+      h('h2', {}, '앱 정보'),
+      h('div', { class: 'kv' }, h('span', {}, '앱 버전'), h('b', { id: 'appVer' }, document.documentElement.dataset.build ? 'v' + document.documentElement.dataset.build : '웹')),
+      h('p', { class: 'muted' }, '새 버전이 나오면 화면 위에 알림이 떠요. 받아서 설치하면 지금 앱 위에 덮어써져요.')),
+
     h('section', { class: 'card danger-zone' },
       h('h2', {}, '초기화'),
       h('button', { id: 'btnResetDay', class: 'btn ghost', type: 'button', onclick: async () => {

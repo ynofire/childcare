@@ -1,7 +1,7 @@
 // 관리 탭: 벌금/보너스 · 월 학원비 · 항목 관리(금액 수정·추가·사용 해제)
 const KINDS = [
-  ['fixed', '생활비 (부모가 날짜별로 적용)'], ['optional', '선택 차감 (자녀가 쓴 날 체크)'], ['base', '앞가림 (하면 +)'],
-  ['extra', '심부름 (승인 후 +)'], ['spend', '쓰기 (자녀가 사용)'],
+  ['fixed', '생활비 (부모가 날짜별로 적용)'], ['optional', '선택 차감 (쓴 날 신청 → 승인 후 -)'], ['base', '앞가림 (하면 신청 → 승인 후 +)'],
+  ['extra', '심부름 (여러 번 신청 → 승인 후 +)'], ['spend', '쓰기 (신청 → 승인 후 -)'],
 ];
 const validAmt = (v) => { const raw = String(v ?? '').trim(); const n = Number(raw); return raw !== '' && Number.isInteger(n) && n > 0 && n <= 10000000 ? n : null; };
 

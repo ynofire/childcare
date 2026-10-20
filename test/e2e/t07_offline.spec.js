@@ -30,7 +30,7 @@ test('t07b 끊김 중 누르고 앱을 새로고침해도 큐가 복원되어 �
   await child.locator(`[data-card="${it.trash.id}"]`).click();
   await child.locator('#net:not([hidden])').waitFor();
   const q = await child.evaluate(() => localStorage.getItem('cc_queue_v1'));
-  assert.ok(q && q.includes('request_extra'), '큐가 저장돼 있다: ' + q);
+  assert.ok(q && q.includes('request_item'), '큐가 저장돼 있다: ' + q);
   await child.unroute(RPC);
   await child.reload();
   await child.locator(`[data-card="${it.trash.id}"][data-state="waiting"]`).waitFor({ timeout: 8000 });

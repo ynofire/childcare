@@ -22,21 +22,35 @@ test('t10 파산(-35,000): 앞가림·심부름 locked, 쓰기 불가 사유 표
   assert.match(await child.locator('[data-status-note]').innerText(), /마이너스/);
   assert.equal(await child.locator(`[data-spend="${it.pc1.id}"]`).isDisabled(), true);
   await child.locator(`[data-card="${it.school.id}"]`).click();
-  await child.locator(`[data-card="${it.school.id}"][data-state="done"]`).waitFor();
+  await child.locator(`[data-card="${it.school.id}"][data-state="waiting"]`).waitFor();
+  const st = await w.rpc('get_state', { p_secret: keys.parentSecret });
+  assert.equal(st.family.balance, -5000, '마이너스여도 신청만으로는 잔고가 바뀌지 않는다');
+  assert.equal(st.pending.filter((r) => r.item_id === it.school.id).length, 1);
   assert.deepEqual(w.errors, []);
 });
 
-test('t10b 쓰기: 확인 시트 → 차감, 포인트가 모자라면 이유 표시', async () => {
+test('t10b 쓰기: 확인 시트 → 신청만 되고 승인해야 차감, 대기분까지 합쳐 모자라면 이유 표시', async () => {
   const { child } = w;
   await w.rpc('adjust', { p_secret: keys.parentSecret, p_amount: 100000, p_reason: '보너스' });
-  const before = (await w.rpc('get_state', { p_secret: keys.parentSecret })).family.balance;
+  const bal = async () => (await w.rpc('get_state', { p_secret: keys.parentSecret })).family.balance;
+  const before = await bal();
   await child.locator(`[data-spend="${it.pc1.id}"]`).click();
   await child.locator('.sheet .btn.primary').click();
-  await child.waitForFunction((b) => document.querySelector('#bal').textContent.replace(/[^0-9-]/g, '') !== String(b), before);
-  const after = (await w.rpc('get_state', { p_secret: keys.parentSecret })).family.balance;
+  await child.locator(`[data-spend-note="${it.pc1.id}"]`, { hasText: '승인 대기 1' }).waitFor();
+  assert.equal(await bal(), before, '신청만으로는 차감되지 않는다');
+  const req = (await w.rpc('get_state', { p_secret: keys.parentSecret })).pending.find((r) => r.item_id === it.pc1.id);
+  await w.parent.locator(`[data-decide="${req.id}"][data-ok="1"]`).click();
+  await child.locator(`[data-spend-note="${it.pc1.id}"]`, { hasText: '오늘 1번 사용' }).waitFor();
+  const after = await bal();
   assert.equal(after - before, it.pc1.amount);
   // 한 번 누르고 확인을 취소하면 아무 일도 없다
   await child.locator(`[data-spend="${it.pc1.id}"]`).click();
   await child.locator('.sheet .btn.ghost').click();
-  assert.equal((await w.rpc('get_state', { p_secret: keys.parentSecret })).family.balance, after);
+  assert.equal(await bal(), after);
+  assert.equal((await w.rpc('get_state', { p_secret: keys.parentSecret })).pending.filter((r) => r.item_id === it.pc1.id).length, 0);
+  // 잔고를 거의 비우면 '모자라요'
+  await w.rpc('adjust', { p_secret: keys.parentSecret, p_amount: -(after - 5000), p_reason: '조정' });
+  await child.locator(`[data-spend="${it.pc1.id}"]`).waitFor();
+  await child.waitForFunction((id) => document.querySelector(`[data-spend="${id}"]`).disabled, it.pc1.id);
+  assert.match(await child.locator('.reason').first().innerText(), /모자라/);
 });

@@ -101,8 +101,6 @@ create table public.requests (
 create index requests_family_status_idx on public.requests(family_id, status);
 create index requests_item_idx on public.requests(item_id);
 create index requests_mission_idx on public.requests(mission_id);
-create unique index requests_one_wait_per_item_day on public.requests(family_id, item_id, day)
-  where status = 'wait' and item_id is not null;
 create unique index requests_one_wait_per_mission on public.requests(mission_id)
   where status = 'wait';
 
@@ -203,6 +201,11 @@ begin
                                           'status', m.status, 'day', m.day) order by m.id)
         from public.missions m where m.family_id = f.id
          and (m.status <> 'done' or m.created_at > now() - interval '3 days')), '[]'::jsonb),
+    'done_counts', coalesce((
+      select jsonb_object_agg(x.item_id, x.n)
+        from (select r.item_id, count(*) as n from public.requests r
+               where r.family_id = f.id and r.day = d and r.status = 'done' and r.item_id is not null
+               group by r.item_id) x), '{}'::jsonb),
     'pending', coalesce((
       select jsonb_agg(jsonb_build_object('id', r.id, 'item_id', r.item_id, 'mission_id', r.mission_id,
                                           'label', r.label, 'amount', r.amount, 'day', r.day) order by r.id desc)
@@ -251,9 +254,9 @@ begin
     (fid, 'util',    'fixed',    '수광열비 (샤워·전기·온수)', '매일 기본',                      -1000,  false, 30),
     (fid, 'shot',    'fixed',    '키 크는 주사 (건강관리)',   '매일 고정',                      -10000, true,  40),
     (fid, 'phone',   'fixed',    '핸드폰 기본 유지비',        '매일 고정',                      -1000,  false, 50),
-    (fid, 'pad',     'optional', '패드 사용료 (선택)',        '쓴 날만 자녀가 직접 체크',       -2000,  false, 60),
+    (fid, 'pad',     'optional', '패드 사용료 (선택)',        '쓴 날만 신청 · 승인 후 차감',       -2000,  false, 60),
     (fid, 'academy', 'fixed',    '학원비 (일할)',             '월 학원비 ÷ 30 · 주말 쉬면 제외', -round(acad / 30.0)::integer, false, 70),
-    (fid, 'school',  'base',     '공부하기 (학교·숙제·주말 공부 포함)', '했으면 체크',          10000,  false, 80),
+    (fid, 'school',  'base',     '공부하기 (학교·숙제·주말 공부 포함)', '했으면 눌러서 신청',          10000,  false, 80),
     (fid, 'room',    'base',     '내 방 스스로 정리하기',     '침대·책상·바닥 정리',            10000,  false, 90),
     (fid, 'dish',    'extra',    '설거지 완벽 클리어',        '',                               10000,  false, 100),
     (fid, 'trash',   'extra',    '쓰레기 비우기·분리수거',    '',                               10000,  false, 110),
@@ -298,53 +301,6 @@ begin
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
 end $$;
 
--- 자녀: 앞가림(base) 체크 / 패드(optional) 사용 체크 — 지난 날짜도 가능
-create or replace function public.toggle_item(p_secret text, p_item uuid, p_on boolean, p_day date default null)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare
-  a record; f public.families%rowtype; it public.items%rowtype; ex public.checks%rowtype;
-  d date; st text;
-begin
-  select * into a from private.check_secret(p_secret, 'child');
-  select * into f from public.families where id = a.o_family for update;
-  d := private.pick_day(f.id, p_day, true);
-  select * into it from public.items
-   where id = p_item and family_id = f.id and active and kind in ('base', 'optional');
-  if not found then raise exception 'invalid'; end if;
-  st := private.status_of(f.balance, f.bankrupt_limit);
-  select * into ex from public.checks where family_id = f.id and day = d and item_id = it.id;
-  if p_on and not found then
-    if it.kind = 'base' and st = 'bankrupt' then raise exception 'bankrupt'; end if;
-    if it.kind = 'optional' and st <> 'ok' then raise exception 'blocked'; end if;
-    insert into public.checks (family_id, day, item_id, amount) values (f.id, d, it.id, it.amount);
-    perform private.add_tx(f.id, it.title, it.amount, d);
-  elsif not p_on and found then
-    if it.kind = 'base' and st = 'bankrupt' then raise exception 'bankrupt'; end if;
-    delete from public.checks where family_id = f.id and day = d and item_id = it.id;
-    perform private.add_tx(f.id, it.title || ' (취소)', -ex.amount, d);
-  end if;
-  return private.build_state(a.o_family, a.o_role, a.o_cred, d);
-end $$;
-
--- 자녀: 심부름 신청 — 지난 날짜도 가능
-create or replace function public.request_extra(p_secret text, p_item uuid, p_day date default null)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare a record; f public.families%rowtype; it public.items%rowtype; d date;
-begin
-  select * into a from private.check_secret(p_secret, 'child');
-  select * into f from public.families where id = a.o_family for update;
-  d := private.pick_day(f.id, p_day, true);
-  select * into it from public.items where id = p_item and family_id = f.id and active and kind = 'extra';
-  if not found then raise exception 'invalid'; end if;
-  if private.status_of(f.balance, f.bankrupt_limit) = 'bankrupt' then raise exception 'bankrupt'; end if;
-  if exists (select 1 from public.checks where family_id = f.id and day = d and item_id = it.id) then
-    raise exception 'duplicate';
-  end if;
-  insert into public.requests (family_id, item_id, label, amount, day)
-    values (f.id, it.id, it.title, it.amount, d) on conflict do nothing;
-  return private.build_state(a.o_family, a.o_role, a.o_cred, d);
-end $$;
-
 -- 자녀: 미션 완료 신청
 create or replace function public.request_mission(p_secret text, p_mission bigint, p_day date default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -362,38 +318,90 @@ begin
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
 end $$;
 
--- 자녀: 포인트 쓰기 (PC / 환전) — 항상 오늘 기준
-create or replace function public.consume(p_secret text, p_item uuid, p_day date default null)
+-- 자녀: 신청 — 앞가림·패드·심부름·포인트 쓰기 모두 부모가 승인해야 잔고에 반영된다.
+--   앞가림·패드: 하루 한 번(지난 날짜 가능) · 심부름·쓰기: 하루 여러 번(대기는 항목당 5건까지) · 쓰기는 항상 오늘
+create or replace function public.request_item(p_secret text, p_item uuid, p_day date default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare a record; f public.families%rowtype; it public.items%rowtype;
+declare
+  a record; f public.families%rowtype; it public.items%rowtype; d date; st text; pend integer;
 begin
   select * into a from private.check_secret(p_secret, 'child');
   select * into f from public.families where id = a.o_family for update;
-  select * into it from public.items where id = p_item and family_id = f.id and active and kind = 'spend';
+  select * into it from public.items
+   where id = p_item and family_id = f.id and active and kind in ('base', 'optional', 'extra', 'spend');
   if not found then raise exception 'invalid'; end if;
-  if private.status_of(f.balance, f.bankrupt_limit) <> 'ok' then raise exception 'blocked'; end if;
-  if f.balance < -it.amount then raise exception 'insufficient'; end if;
-  perform private.add_tx(f.id, it.title, it.amount);
+  d := case when it.kind = 'spend' then private.today() else private.pick_day(f.id, p_day, true) end;
+  st := private.status_of(f.balance, f.bankrupt_limit);
+  if it.kind in ('base', 'extra') and st = 'bankrupt' then raise exception 'bankrupt'; end if;
+  if it.kind in ('optional', 'spend') and st <> 'ok' then raise exception 'blocked'; end if;
+  if it.kind in ('base', 'optional') then
+    if exists (select 1 from public.checks where family_id = f.id and day = d and item_id = it.id)
+       or exists (select 1 from public.requests where family_id = f.id and item_id = it.id and day = d and status = 'wait') then
+      raise exception 'duplicate';
+    end if;
+  else
+    select count(*) into pend from public.requests
+     where family_id = f.id and item_id = it.id and day = d and status = 'wait';
+    if pend >= 5 then raise exception 'too_many'; end if;
+  end if;
+  if it.kind = 'spend' and f.balance - coalesce((
+       select sum(-r.amount) from public.requests r join public.items x on x.id = r.item_id
+        where r.family_id = f.id and r.status = 'wait' and x.kind = 'spend'), 0) < -it.amount then
+    raise exception 'insufficient';
+  end if;
+  insert into public.requests (family_id, item_id, label, amount, day)
+    values (f.id, it.id, it.title, it.amount, d);
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
 end $$;
 
+-- (옛 앱 호환) 심부름 신청 — request_item 과 같은 규칙
+create or replace function public.request_extra(p_secret text, p_item uuid, p_day date default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  return public.request_item(p_secret, p_item, p_day);
+end $$;
+
+-- (옛 앱) 승인 없이 바로 반영되던 호출은 막는다. 새 앱(request_item)을 쓰도록 안내.
+create or replace function public.toggle_item(p_secret text, p_item uuid, p_on boolean, p_day date default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.check_secret(p_secret, 'child');
+  raise exception 'update_required';
+end $$;
+
+create or replace function public.consume(p_secret text, p_item uuid, p_day date default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  perform private.check_secret(p_secret, 'child');
+  raise exception 'update_required';
+end $$;
+
 -- 부모: 승인 / 거절 (대기 중인 요청만, 중복 승인 불가)
+--   앞가림·패드는 승인할 때 체크가 기록되고, 쓰기는 승인 시점 잔고가 모자라면 승인할 수 없다.
 create or replace function public.decide_request(p_secret text, p_request bigint, p_ok boolean, p_day date default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare a record; r public.requests%rowtype;
+declare a record; r public.requests%rowtype; it public.items%rowtype;
 begin
   select * into a from private.check_secret(p_secret, 'parent');
   select * into r from public.requests
    where id = p_request and family_id = a.o_family and status = 'wait' for update;
   if not found then raise exception 'invalid'; end if;
   if p_ok then
-    update public.requests set status = 'done', decided_at = now() where id = r.id;
     if r.mission_id is not null then
       update public.missions set status = 'done' where id = r.mission_id;
     elsif r.item_id is not null then
-      insert into public.checks (family_id, day, item_id, amount)
-        values (a.o_family, r.day, r.item_id, r.amount) on conflict do nothing;
+      select * into it from public.items where id = r.item_id;
+      if it.kind in ('base', 'optional') then
+        insert into public.checks (family_id, day, item_id, amount)
+          values (a.o_family, r.day, r.item_id, r.amount) on conflict do nothing;
+        if not found then raise exception 'duplicate'; end if;
+      elsif it.kind = 'spend' then
+        if (select balance from public.families where id = a.o_family for update) < -r.amount then
+          raise exception 'insufficient';
+        end if;
+      end if;
     end if;
+    update public.requests set status = 'done', decided_at = now() where id = r.id;
     perform private.add_tx(a.o_family, r.label, r.amount, r.day);
   else
     update public.requests set status = 'reject', decided_at = now() where id = r.id;
@@ -402,6 +410,31 @@ begin
     end if;
   end if;
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
+end $$;
+
+-- 부모: 해당 날짜에 적용·체크된 항목을 모두 되돌림 (낸 돈·받은 포인트도 함께 되돌려서 잔고가 맞게)
+create or replace function public.reset_day(p_secret text, p_day date default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare a record; d date; c record;
+begin
+  select * into a from private.check_secret(p_secret, 'parent');
+  d := private.pick_day(a.o_family, p_day, true);
+  for c in select ch.item_id, ch.amount, i.title
+             from public.checks ch join public.items i on i.id = ch.item_id
+            where ch.family_id = a.o_family and ch.day = d loop
+    delete from public.checks where family_id = a.o_family and day = d and item_id = c.item_id;
+    if c.amount <> 0 then
+      perform private.add_tx(a.o_family, c.title || ' (초기화)', -c.amount, d);
+    end if;
+  end loop;
+  -- 하루 여러 번 하는 심부름: 승인된 기록을 지우고 받은 포인트를 회수
+  for c in select r.id, r.label, r.amount
+             from public.requests r join public.items i on i.id = r.item_id
+            where r.family_id = a.o_family and r.day = d and r.status = 'done' and i.kind = 'extra' loop
+    delete from public.requests where id = c.id;
+    perform private.add_tx(a.o_family, c.label || ' (초기화)', -c.amount, d);
+  end loop;
+  return private.build_state(a.o_family, a.o_role, a.o_cred, d);
 end $$;
 
 -- 부모: 해당 날짜 생활비(고정지출) 적용.
@@ -539,24 +572,6 @@ begin
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
 end $$;
 
--- 부모: 해당 날짜에 적용·체크된 항목을 모두 되돌림 (낸 돈·받은 포인트도 함께 되돌려서 잔고가 맞게)
-create or replace function public.reset_day(p_secret text, p_day date default null)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare a record; d date; c record;
-begin
-  select * into a from private.check_secret(p_secret, 'parent');
-  d := private.pick_day(a.o_family, p_day, true);
-  for c in select ch.item_id, ch.amount, i.title
-             from public.checks ch join public.items i on i.id = ch.item_id
-            where ch.family_id = a.o_family and ch.day = d loop
-    delete from public.checks where family_id = a.o_family and day = d and item_id = c.item_id;
-    if c.amount <> 0 then
-      perform private.add_tx(a.o_family, c.title || ' (초기화)', -c.amount, d);
-    end if;
-  end loop;
-  return private.build_state(a.o_family, a.o_role, a.o_cred, d);
-end $$;
-
 -- 부모: 전체 초기화 (잔고·내역·체크·신청·미션 삭제, 항목·학원비 설정은 유지)
 create or replace function public.reset_all(p_secret text, p_day date default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -635,7 +650,7 @@ revoke execute on all functions in schema public from public, anon, authenticate
 grant execute on function
   public.create_family(text, integer, integer, date), public.redeem_invite(text),
   public.get_state(text, date), public.toggle_item(text, uuid, boolean, date),
-  public.request_extra(text, uuid, date), public.request_mission(text, bigint, date),
+  public.request_item(text, uuid, date), public.request_extra(text, uuid, date), public.request_mission(text, bigint, date),
   public.consume(text, uuid, date), public.decide_request(text, bigint, boolean, date),
   public.apply_fixed(text, date, jsonb, integer, jsonb), public.create_mission(text, text, integer, date),
   public.delete_mission(text, bigint, date), public.adjust(text, integer, text, date),
