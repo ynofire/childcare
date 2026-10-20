@@ -172,3 +172,16 @@ test('s11 lastSyncAt 은 서버 응답을 반영한 시각이고, 실패한 갱�
   fail = true; await wait(5); await store.refresh();
   assert.equal(store.lastSyncAt, first);
 });
+
+test('s12 앱 복귀 신호(cc:resume, Capacitor App resume)에서도 즉시 갱신하고, stop 뒤에는 반응하지 않는다', async () => {
+  const doc = new Target(), win = new Target();
+  const { store, calls } = mk({ env: { doc, win } });
+  const gets = () => calls.filter((c) => c.fn === 'get_state').length;
+  store.start(); await wait(10);
+  const base = gets();
+  win.dispatchEvent(new Event('cc:resume')); await wait(10);
+  assert.equal(gets(), base + 1);
+  store.stop();
+  win.dispatchEvent(new Event('cc:resume')); await wait(10);
+  assert.equal(gets(), base + 1);
+});

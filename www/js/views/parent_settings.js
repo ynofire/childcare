@@ -1,5 +1,6 @@
 // 설정 탭: 기기 연결(코드 만들기·목록·해제) · 복구 코드 · 화면 잠금(PIN) · 초기화
 import { storage, SECRET_KEY } from '../storage.js';
+import { plugin } from '../native.js';
 
 const secret = () => storage.getItem(SECRET_KEY) || '';
 const validPin = (v) => /^[0-9]{4,6}$/.test(String(v || ''));
@@ -15,7 +16,7 @@ async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch (e) { return false; }
 }
 async function shareText(text) {
-  const S = globalThis.Capacitor && globalThis.Capacitor.Plugins && globalThis.Capacitor.Plugins.Share;
+  const S = plugin('Share');
   try {
     if (S && S.share) { await S.share({ text, dialogTitle: '연결 코드 보내기' }); return true; }
     if (navigator.share) { await navigator.share({ text }); return true; }

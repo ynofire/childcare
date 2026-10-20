@@ -1,5 +1,6 @@
 // 화면 도우미: 요소 만들기(h), 토스트, 하단 시트, 확인 시트, 햅틱, 포커스를 지키는 다시 그리기, 탭 바.
 // 원칙: 사용자 글자는 항상 textContent 로만 넣는다(HTML 문자열 삽입 금지) → XSS 불가.
+import { plugin } from './native.js';
 export { fmt, money, addDays, fmtDate, shortTitle } from './format.js';
 
 export function h(tag, attrs, ...children) {
@@ -31,8 +32,8 @@ export function toast(msg, kind = 'info') {
 
 export function haptic() {
   try {
-    const H = globalThis.Capacitor && globalThis.Capacitor.Plugins && globalThis.Capacitor.Plugins.Haptics;
-    if (H && H.impact) H.impact({ style: 'LIGHT' });
+    const H = plugin('Haptics');
+    if (H && H.impact) H.impact({ style: 'LIGHT' }).catch(() => {});
     else if (navigator.vibrate) navigator.vibrate(8);
   } catch (e) { /* 햅틱은 없어도 됨 */ }
 }

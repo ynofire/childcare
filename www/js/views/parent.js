@@ -87,8 +87,11 @@ export function mount(root, { store, ui, rpc, errText, reboot }) {
   root.addEventListener('compositionend', onCompEnd);
   const onVis = () => { if (document.hidden) lock.onHidden(); else { lock.onVisible(); draw(); } };
   document.addEventListener('visibilitychange', onVis);
+  const onPause = () => lock.onHidden(), onResume = () => { lock.onVisible(); draw(); };
+  window.addEventListener('cc:pause', onPause);
+  window.addEventListener('cc:resume', onResume);
 
   const off = store.subscribe(() => draw());
   draw();
-  return () => { off(); root.removeEventListener('compositionstart', onCompStart); root.removeEventListener('compositionend', onCompEnd); document.removeEventListener('visibilitychange', onVis); };
+  return () => { off(); root.removeEventListener('compositionstart', onCompStart); root.removeEventListener('compositionend', onCompEnd); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('cc:pause', onPause); window.removeEventListener('cc:resume', onResume); };
 }

@@ -8,10 +8,21 @@
     "test:sql": "bash test/run-sql.sh",
     "test:unit": "node --test \"test/unit/*.test.js\"",
     "test:e2e": "node --test --test-concurrency=1 \"test/e2e/*.spec.js\"",
-    "test": "npm run test:sql && npm run test:unit && npm run test:e2e"
+    "test": "npm run test:sql && npm run test:unit && npm run test:e2e",
+    "vendor": "cp node_modules/@capacitor/core/dist/index.js www/vendor/capacitor-core.js",
+    "android:sync": "npm run vendor && npx cap sync android",
+    "check:android": "bash test/check-android.sh"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
     "pg": "^8.23.1",
     "playwright-core": "^1.56.0"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/share": "^8.0.3"
   }
 }

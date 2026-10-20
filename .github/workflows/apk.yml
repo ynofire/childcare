@@ -1,0 +1,97 @@
+name: APK 빌드
+
+# main 에 앱 코드가 바뀌면 자동으로, 또는 Actions 탭에서 "Run workflow" 로 수동 실행.
+on:
+  push:
+    branches: [main]
+    paths: ['www/**', 'android/**', 'capacitor.config.json', 'package.json', 'package-lock.json', '.github/workflows/apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 서명된 빌드를 Releases 에 올리기 위해 필요
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_VERSION_CODE: ${{ github.run_number }}
+      KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KS_KEYPASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 웹 앱 점검 (서버 없이 도는 단위 테스트)
+        run: |
+          npm ci
+          node --test test/unit/store.test.js test/unit/api.test.js test/unit/format.test.js test/unit/cardstate.test.js test/unit/lock.test.js test/unit/native.test.js
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 웹 파일을 안드로이드 프로젝트로 복사
+        run: npx cap sync android
+
+      - name: 서명 여부 결정
+        id: sign
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_KEYPASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "서명 키가 있어 서명된 릴리스 APK 를 만듭니다."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::서명 키(Secrets)가 없어 디버그 APK 를 만듭니다. 업데이트(덮어쓰기)가 되지 않으니 README 의 'Secrets 등록'을 먼저 하세요."
+          fi
+
+      - name: APK 만들기
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.sign.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then
+            ./gradlew --no-daemon assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk "../childcare-v${APP_VERSION_CODE}.apk"
+          else
+            ./gradlew --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk "../childcare-v${APP_VERSION_CODE}-debug.apk"
+          fi
+
+      - name: 서명 키 파일 지우기
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: APK 보관 (Actions > 실행 > Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: childcare-apk-${{ github.run_number }}
+          path: childcare-v*.apk
+          if-no-files-found: error
+
+      - name: Releases 에 올리기 (서명된 빌드만)
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${APP_VERSION_CODE}" "childcare-v${APP_VERSION_CODE}.apk" \
+            --title "가정 내 자본주의 v${APP_VERSION_CODE}" \
+            --notes "휴대폰에서 이 APK 를 내려받아 설치하세요. (기존 앱 위에 덮어써집니다)"

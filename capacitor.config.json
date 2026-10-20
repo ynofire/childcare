@@ -1,0 +1,7 @@
+{
+  "appId": "kr.ynofire.childcare",
+  "appName": "가정 내 자본주의",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

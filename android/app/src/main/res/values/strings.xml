@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">가정 내 자본주의</string>
+    <string name="title_activity_main">가정 내 자본주의</string>
+    <string name="package_name">kr.ynofire.childcare</string>
+    <string name="custom_url_scheme">kr.ynofire.childcare</string>
+</resources>

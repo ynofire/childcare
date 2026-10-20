@@ -116,6 +116,7 @@ export function createStore({ rpc, storage, pollMs = 5000, retryMs = 2000, env }
     doc && doc.addEventListener('visibilitychange', onVisible);
     win && win.addEventListener('online', onOnline);
     win && win.addEventListener('focus', onFocus);
+    win && win.addEventListener('cc:resume', onFocus); // Capacitor App 'resume' (app.js 가 전달)
     timer = setInterval(() => { if (!(doc && doc.hidden)) refresh(); }, pollMs);
     if (queue.length) { notify({ reason: 'pending' }); pump(); }
     refresh();
@@ -126,6 +127,7 @@ export function createStore({ rpc, storage, pollMs = 5000, retryMs = 2000, env }
     doc && doc.removeEventListener('visibilitychange', onVisible);
     win && win.removeEventListener('online', onOnline);
     win && win.removeEventListener('focus', onFocus);
+    win && win.removeEventListener('cc:resume', onFocus);
   }
   function setDay(d) { day = d || null; return refresh(); }
   function signOutLocal() {

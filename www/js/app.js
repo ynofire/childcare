@@ -5,6 +5,7 @@ import { POLL_MS } from './config.js';
 import { storage, SECRET_KEY } from './storage.js';
 import * as ui from './ui.js';
 import { mountConnect } from './views/connect.js';
+import { initNative, plugin } from './native.js';
 
 const root = document.getElementById('app');
 const net = document.getElementById('net');
@@ -50,5 +51,18 @@ export async function boot(notice) {
     booting = false;
   }
 }
+
+// 안드로이드 앱에서만: 뒤로가기(열린 시트 닫기 → 없으면 앱 종료), 앱 복귀/일시정지를 화면·저장소에 알린다.
+(async () => {
+  if (!(await initNative())) return;
+  const App = plugin('App');
+  if (!App || !App.addListener) return;
+  App.addListener('backButton', () => {
+    const overlay = document.querySelector('.overlay');
+    if (overlay) overlay.click(); else App.exitApp();
+  });
+  App.addListener('resume', () => window.dispatchEvent(new Event('cc:resume')));
+  App.addListener('pause', () => window.dispatchEvent(new Event('cc:pause')));
+})();
 
 boot();
