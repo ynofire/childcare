@@ -3,3 +3,5 @@ node_modules/
 *.jks
 *.keystore
 test-results/
+# 앱 서명용 '공개 키'(의도적으로 저장소에 포함. 가족용 앱이라 시크릿 없이 빌드하기 위한 선택 — README 참고)
+!android/app/childcare-public.jks

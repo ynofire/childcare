@@ -18,7 +18,7 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // 서명 정보는 저장소에 두지 않고 환경변수(GitHub Secrets)에서만 읽는다. 없으면 release 는 서명 없이 만들어진다.
+    // 서명 정보는 환경변수에서 읽는다(CI 가 저장소의 공개 키를 가리킴). 없으면 release 는 서명 없이 만들어진다.
     signingConfigs {
         release {
             def ksPath = System.getenv('ANDROID_KEYSTORE_PATH')

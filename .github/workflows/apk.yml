@@ -20,10 +20,11 @@ jobs:
     timeout-minutes: 30
     env:
       APP_VERSION_CODE: ${{ github.run_number }}
-      KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      KS_KEYPASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      # 서명 키는 저장소에 포함된 '공개 키'(android/app/childcare-public.jks)를 쓴다. 시크릿 등록이 필요 없다.
+      ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/android/app/childcare-public.jks
+      ANDROID_KEYSTORE_PASSWORD: childcare-public
+      ANDROID_KEY_ALIAS: childcare
+      ANDROID_KEY_PASSWORD: childcare-public
     steps:
       - uses: actions/checkout@v4
 
@@ -56,28 +57,11 @@ jobs:
       - name: 웹 파일을 안드로이드 프로젝트로 복사
         run: npx cap sync android
 
-      - name: 서명 여부 결정
-        id: sign
-        run: |
-          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_KEYPASS" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "signed=true" >> "$GITHUB_OUTPUT"
-            echo "서명 키가 있어 서명된 릴리스 APK 를 만듭니다."
-          else
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::서명 키(Secrets)가 없어 디버그 APK 를 만듭니다. 업데이트(덮어쓰기)가 되지 않으니 README 의 'Secrets 등록'을 먼저 하세요."
-          fi
-
       - name: APK 만들기
         working-directory: android
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ steps.sign.outputs.signed == 'true' && format('{0}/release.jks', runner.temp) || '' }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then TASK=assembleRelease; else TASK=assembleDebug; fi
+          TASK=assembleRelease
           set +e
           ./gradlew --no-daemon --stacktrace "$TASK" > ../gradle-build.log 2>&1
           RC=$?
@@ -88,15 +72,7 @@ jobs:
             echo "::error title=Gradle 실패::${MSG:-$(tail -25 ../gradle-build.log | sed ':a;N;$!ba;s/\n/%0A/g')}"
             exit "$RC"
           fi
-          if [ "$TASK" = "assembleRelease" ]; then
-            cp app/build/outputs/apk/release/app-release.apk "../childcare-v${APP_VERSION_CODE}.apk"
-          else
-            cp app/build/outputs/apk/debug/app-debug.apk "../childcare-v${APP_VERSION_CODE}-debug.apk"
-          fi
-
-      - name: 서명 키 파일 지우기
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks"
+          cp app/build/outputs/apk/release/app-release.apk "../childcare-v${APP_VERSION_CODE}.apk"
 
       - name: 빌드 로그 보관
         if: always()
@@ -113,8 +89,7 @@ jobs:
           path: childcare-v*.apk
           if-no-files-found: error
 
-      - name: Releases 에 올리기 (서명된 빌드만)
-        if: steps.sign.outputs.signed == 'true'
+      - name: Releases 에 올리기
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

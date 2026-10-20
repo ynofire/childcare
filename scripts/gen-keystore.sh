@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 릴리스 서명 키를 새로 만든다. 같은 키로 서명해야 앱을 지우지 않고 덮어쓰기 업데이트가 된다.
 # 사용: bash scripts/gen-keystore.sh [출력 폴더]   (기본: ~/childcare-keystore — 저장소 바깥이어야 한다)
-# 출력되는 4개 값을 GitHub 저장소 Settings > Secrets and variables > Actions 에 등록하세요. 키 파일은 안전한 곳에 백업!
+# (선택) 비공개 키로 바꾸고 싶을 때만. 저장소의 공개 키 대신 쓰려면 출력되는 4개 값을 GitHub Secrets 에 등록하고 워크플로의 env 를 secrets 로 되돌리세요.
 set -euo pipefail
 OUT="${1:-$HOME/childcare-keystore}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"

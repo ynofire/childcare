@@ -28,6 +28,8 @@ for need in ('actions/setup-node@v4', 'actions/setup-java@v4', 'android-actions/
     assert need in uses, need
 PY
 cmp -s node_modules/@capacitor/core/dist/index.js www/vendor/capacitor-core.js && ok "vendor/capacitor-core.js 가 설치된 @capacitor/core 와 같음" || bad "vendor/capacitor-core.js 가 오래됨 (npm run vendor)"
-bad_keys=$(git ls-files | grep -E '\.(jks|keystore)$' || true)
-[ -z "$bad_keys" ] && ok "서명 키 파일이 저장소에 없음" || bad "서명 키 파일이 추적됨: $bad_keys"
+bad_keys=$(git ls-files | grep -E '\.(jks|keystore)$' | grep -v '^android/app/childcare-public\.jks$' || true)
+[ -z "$bad_keys" ] && ok "공개 키 외의 서명 키 파일이 저장소에 없음" || bad "서명 키 파일이 추적됨: $bad_keys"
+[ -f android/app/childcare-public.jks ] && ok "공개 서명 키가 있음" || bad "android/app/childcare-public.jks 없음"
+grep -q 'secrets\.' .github/workflows/apk.yml && bad "워크플로가 Secrets 를 참조함(공개 키 방식과 불일치)" || ok "워크플로가 Secrets 에 의존하지 않음"
 [ $fail -eq 0 ] && echo "ANDROID_CHECK_OK" || { echo "ANDROID_CHECK_FAILED"; exit 1; }
