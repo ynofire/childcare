@@ -40,7 +40,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       - uses: android-actions/setup-android@v3
         continue-on-error: true   # 실패해도 러너에 미리 깔린 Android SDK 로 이어간다
