@@ -186,4 +186,5 @@ delete from public.checks ch using public.items i where i.id = ch.item_id and i.
 update public.items set descr = '쓴 날만 신청 · 승인 후 차감' where slug = 'pad' and descr = '쓴 날만 자녀가 직접 체크';
 update public.items set descr = '했으면 눌러서 신청' where slug = 'school' and descr = '했으면 체크';
 
+revoke execute on function public.request_item(text, uuid, date) from public, authenticated;
 grant execute on function public.request_item(text, uuid, date) to anon;
