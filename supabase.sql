@@ -82,6 +82,7 @@ create table public.missions (
   title text not null,
   amount integer not null check (amount > 0),
   status text not null default 'open' check (status in ('open','wait','done')),
+  repeatable boolean not null default false,
   created_at timestamptz not null default now()
 );
 create index missions_family_day_idx on public.missions(family_id, day);
@@ -198,9 +199,14 @@ begin
         from public.checks c where c.family_id = f.id and c.day = d), '{}'::jsonb),
     'missions', coalesce((
       select jsonb_agg(jsonb_build_object('id', m.id, 'title', m.title, 'amount', m.amount,
-                                          'status', m.status, 'day', m.day) order by m.id)
+                                          'status', m.status, 'day', m.day, 'repeatable', m.repeatable) order by m.id)
         from public.missions m where m.family_id = f.id
          and (m.status <> 'done' or m.created_at > now() - interval '3 days')), '[]'::jsonb),
+    'mission_done', coalesce((
+      select jsonb_object_agg(x.mission_id, x.n)
+        from (select r.mission_id, count(*) as n from public.requests r
+               where r.family_id = f.id and r.day = d and r.status = 'done' and r.mission_id is not null
+               group by r.mission_id) x), '{}'::jsonb),
     'done_counts', coalesce((
       select jsonb_object_agg(x.item_id, x.n)
         from (select r.item_id, count(*) as n from public.requests r
@@ -313,8 +319,9 @@ begin
   if m.status <> 'open' then raise exception 'duplicate'; end if;
   if private.status_of(f.balance, f.bankrupt_limit) = 'bankrupt' then raise exception 'bankrupt'; end if;
   update public.missions set status = 'wait' where id = m.id;
+  -- 반복 미션은 한 날짜에 묶이지 않고 '한 날(오늘)'로 기록, 일반 미션은 낸 날짜로 기록
   insert into public.requests (family_id, mission_id, label, amount, day)
-    values (f.id, m.id, '미션: ' || m.title, m.amount, m.day);
+    values (f.id, m.id, '미션: ' || m.title, m.amount, case when m.repeatable then private.today() else m.day end);
   return private.build_state(a.o_family, a.o_role, a.o_cred, p_day);
 end $$;
 
@@ -388,7 +395,7 @@ begin
   if not found then raise exception 'invalid'; end if;
   if p_ok then
     if r.mission_id is not null then
-      update public.missions set status = 'done' where id = r.mission_id;
+      update public.missions set status = case when repeatable then 'open' else 'done' end where id = r.mission_id;
     elsif r.item_id is not null then
       select * into it from public.items where id = r.item_id;
       if it.kind in ('base', 'optional') then
@@ -488,7 +495,8 @@ begin
 end $$;
 
 -- 부모: 미션 내주기 / 삭제
-create or replace function public.create_mission(p_secret text, p_title text, p_amount integer, p_day date default null)
+create or replace function public.create_mission(
+  p_secret text, p_title text, p_amount integer, p_day date default null, p_repeat boolean default false)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare a record; d date; ttl text;
 begin
@@ -496,7 +504,8 @@ begin
   d := private.pick_day(a.o_family, p_day, true);
   ttl := left(trim(coalesce(p_title, '')), 40);
   if ttl = '' or p_amount is null or p_amount <= 0 or p_amount > 10000000 then raise exception 'invalid'; end if;
-  insert into public.missions (family_id, day, title, amount) values (a.o_family, d, ttl, p_amount);
+  insert into public.missions (family_id, day, title, amount, repeatable)
+    values (a.o_family, d, ttl, p_amount, coalesce(p_repeat, false));
   return private.build_state(a.o_family, a.o_role, a.o_cred, d);
 end $$;
 
@@ -652,7 +661,7 @@ grant execute on function
   public.get_state(text, date), public.toggle_item(text, uuid, boolean, date),
   public.request_item(text, uuid, date), public.request_extra(text, uuid, date), public.request_mission(text, bigint, date),
   public.consume(text, uuid, date), public.decide_request(text, bigint, boolean, date),
-  public.apply_fixed(text, date, jsonb, integer, jsonb), public.create_mission(text, text, integer, date),
+  public.apply_fixed(text, date, jsonb, integer, jsonb), public.create_mission(text, text, integer, date, boolean),
   public.delete_mission(text, bigint, date), public.adjust(text, integer, text, date),
   public.set_academy(text, integer, date),
   public.upsert_item(text, uuid, text, text, text, integer, boolean, boolean, date),

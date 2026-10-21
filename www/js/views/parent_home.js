@@ -22,8 +22,8 @@ export function homeTab(ctx, s) {
     const title = (drafts.v.mTitle || '').trim(), raw = String(drafts.v.mAmt || '').trim(), amt = Number(raw);
     if (!title) return toast('미션 내용을 입력해 주세요.', 'err');
     if (raw === '' || !Number.isInteger(amt) || amt <= 0 || amt > 10000000) return toast('포인트는 1~10,000,000 사이의 정수로 입력해 주세요.', 'err');
-    const r = await store.act('create_mission', { p_title: title, p_amount: amt });
-    if (r.ok) { drafts.v.mTitle = ''; drafts.v.mAmt = ''; toast('미션을 냈어요. 아들 폰에 바로 보여요.', 'ok'); ctx.draw(); }
+    const r = await store.act('create_mission', { p_title: title, p_amount: amt, p_repeat: !!drafts.v.mRepeat });
+    if (r.ok) { drafts.v.mTitle = ''; drafts.v.mAmt = ''; drafts.v.mRepeat = false; toast('미션을 냈어요. 아들 폰에 바로 보여요.', 'ok'); ctx.draw(); }
   }
 
   const openMissions = (s.missions || []).filter((m) => m.status !== 'done');
@@ -37,9 +37,12 @@ export function homeTab(ctx, s) {
       h('p', { class: 'muted' }, '날짜와 상관없이, 아들이 완료할 때까지 계속 보여요.'),
       h('label', { class: 'field' }, h('span', {}, '내용'), ctx.input('mTitle', { id: 'mTitle', maxlength: '40', placeholder: '예: 베란다 대청소', 'aria-label': '미션 내용' })),
       h('label', { class: 'field' }, h('span', {}, '포인트'), ctx.input('mAmt', { id: 'mAmt', type: 'number', inputmode: 'numeric', placeholder: '10000', 'aria-label': '미션 포인트' })),
+      h('label', { class: 'check-row' },
+        h('input', { type: 'checkbox', id: 'mRepeat', 'data-k': 'mRepeat', checked: !!drafts.v.mRepeat, onchange: (e) => { drafts.v.mRepeat = e.target.checked; } }),
+        h('span', {}, '여러 번 할 수 있어요 (승인해도 계속 남아요 · 예: 강아지 똥 치우기)')),
       h('button', { id: 'btnMission', class: 'btn primary', type: 'button', onclick: makeMission }, '미션 내기'),
       openMissions.length ? h('ul', { class: 'mlist' }, openMissions.map((m) => h('li', { class: 'mrow' },
-        h('span', { class: 'mrow-t' }, m.title, h('small', {}, m.status === 'wait' ? ' · 승인 대기' : '')),
+        h('span', { class: 'mrow-t' }, m.title, h('small', {}, (m.repeatable ? ' · 반복' : '') + (m.status === 'wait' ? ' · 승인 대기' : ''))),
         h('b', { class: 't-amt pos' }, fmt(Number(m.amount))),
         h('button', { class: 'btn small ghost', type: 'button', 'data-del-mission': m.id, 'aria-label': '미션 지우기', onclick: async () => {
           const ok = await confirmSheet(`"${m.title}" 미션을 지울까요?`, { okText: '지우기', danger: true });

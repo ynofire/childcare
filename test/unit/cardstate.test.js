@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardState, pendingKey, repKey, repInfo, spendable } from '../../www/js/cardstate.js';
+import { cardState, pendingKey, repKey, repInfo, spendable, missionDone } from '../../www/js/cardstate.js';
 
 const base = (o = {}) => ({ status: 'ok', day: '2026-10-17', today: '2026-10-17', checks: {}, pending: [], missions: [], recent: [], items: [], done_counts: {}, family: { balance: 50000 }, ...o });
 const none = new Set();
@@ -81,4 +81,17 @@ test('쓰기 항목: 잔고가 부족하면 locked, 마이너스여도 locked', 
   assert.equal(repInfo('spend', 'pc1', base({ items, family: { balance: 9000 } }), none).locked, true);
   assert.equal(repInfo('spend', 'pc1', base({ items, family: { balance: 10000 } }), none).locked, false);
   assert.equal(repInfo('spend', 'pc1', base({ items, status: 'blocked', family: { balance: 50000 } }), none).locked, true);
+});
+
+test('반복 미션: 승인돼도 열려 있어 todo/done(횟수) 상태로 다시 신청할 수 있다', () => {
+  const m = (status, extra = {}) => ({ missions: [{ id: 5, title: '콩이 똥', amount: 3000, status, day: '2026-10-17', repeatable: true }], ...extra });
+  assert.equal(cardState('mission', 5, base(m('open')), none), 'todo');
+  assert.equal(cardState('mission', 5, base(m('open', { mission_done: { 5: 2 } })), none), 'done');
+  assert.equal(missionDone(base(m('open', { mission_done: { 5: 2 } })), 5), 2);
+  assert.equal(missionDone(base(m('open')), 5), 0);
+  assert.equal(cardState('mission', 5, base(m('wait', { mission_done: { 5: 2 } })), none), 'waiting');
+  assert.equal(cardState('mission', 5, base(m('open')), new Set(['mission:5'])), 'sending');
+  assert.equal(cardState('mission', 5, base(m('open', { status: 'bankrupt' })), none), 'locked');
+  assert.equal(cardState('mission', 5, base(m('open', { mission_done: { 5: 1 }, recent: [{ id: 8, mission_id: 5, status: 'reject' }] })), none), 'rejected');
+  assert.equal(cardState('mission', 5, base(m('open', { mission_done: { 5: 1 }, recent: [{ id: 9, mission_id: 5, status: 'done' }, { id: 8, mission_id: 5, status: 'reject' }] })), none), 'done');
 });

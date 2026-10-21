@@ -32,6 +32,9 @@ export function repInfo(kind, id, s, pending) {
   return { sending: countKeys(pending, id), waiting, done, locked };
 }
 
+// 반복 미션이 보고 있는 날에 승인된 횟수
+export const missionDone = (s, id) => Number((s.mission_done || {})[id] || 0);
+
 export function cardState(kind, id, s, pending) {
   const bankrupt = s.status === 'bankrupt';
   const blocked = s.status !== 'ok';
@@ -58,7 +61,8 @@ export function cardState(kind, id, s, pending) {
     if (m.status === 'done') return 'done';
     if (m.status === 'wait') return 'waiting';
     if (bankrupt) return 'locked';
-    return lastReject((r) => String(r.mission_id) === String(id)) ? 'rejected' : 'todo';
+    if (lastReject((r) => String(r.mission_id) === String(id))) return 'rejected';
+    return m.repeatable && missionDone(s, id) ? 'done' : 'todo'; // 반복 미션은 done 이어도 다시 누를 수 있다
   }
   return 'todo';
 }

@@ -1,7 +1,7 @@
 // 아들 화면: 오늘(할 일 카드) · 내역 · 설정.
 // 카드는 체크박스가 아니라 '상태 카드'다. 상태는 cardState(서버 상태 + 큐)에서만 계산되고, 누르면 '신청'을 큐에 넣을 뿐이다.
 // 아이가 하는 모든 일(앞가림·패드·심부름·미션·포인트 쓰기)은 신청이고, 부모가 승인해야 잔고에 반영된다.
-import { cardState, pendingKey, repKey, repInfo } from '../cardstate.js';
+import { cardState, pendingKey, repKey, repInfo, missionDone } from '../cardstate.js';
 import { storage, SECRET_KEY } from '../storage.js';
 import { dayBar as dayBarView } from './daybar.js';
 
@@ -52,7 +52,8 @@ export function mount(root, { store, ui, rpc, reboot }) {
     haptic();
     const id = it.id;
     if (kind === 'extra') { requestRep({ ...it, kind: 'extra' }); return; }
-    if (state !== 'todo' && state !== 'rejected') return;
+    const again = kind === 'mission' && it.repeatable && state === 'done'; // 반복 미션은 승인돼도 다시 신청
+    if (state !== 'todo' && state !== 'rejected' && !again) return;
     if (kind === 'mission') store.act('request_mission', { p_mission: id }, { key: pendingKey('mission', id) });
     else store.act('request_item', { p_item: id }, { key: pendingKey(kind, id) });
   }
@@ -69,7 +70,10 @@ export function mount(root, { store, ui, rpc, reboot }) {
     const state = cardState(kind, it.id, s, pending);
     const amount = Number(it.amount);
     const rep = kind === 'extra' ? repInfo(kind, it.id, s, pending) : null;
-    const label = rep ? repLabel(rep) : STATE_LABEL[state];
+    const repMission = kind === 'mission' && it.repeatable;
+    const label = rep ? repLabel(rep)
+      : repMission && state === 'done' ? '완료 ' + missionDone(s, it.id) + '번 · 또 하기'
+      : STATE_LABEL[state];
     return h('button', {
       class: 'task ' + kind, type: 'button', 'data-card': it.id, 'data-state': state,
       'aria-disabled': (rep ? rep.locked : state === 'locked') ? 'true' : null,
@@ -82,7 +86,7 @@ export function mount(root, { store, ui, rpc, reboot }) {
     h('span', { class: 'task-side' },
       h('span', { class: 't-amt ' + (amount < 0 ? 'neg' : 'pos') }, fmt(amount)),
       label ? h('span', { class: 't-state' }, label) : null),
-    state === 'done' && !rep ? h('span', { class: 'stamp', 'aria-hidden': 'true' }, '승인') : null);
+    state === 'done' && !rep && !repMission ? h('span', { class: 'stamp', 'aria-hidden': 'true' }, '승인') : null);
   }
 
   const section = (key, title, hint, cards) => cards.length
@@ -139,7 +143,7 @@ export function mount(root, { store, ui, rpc, reboot }) {
     return [
       statusNote(s),
       dayBarView(s, store, ui),
-      section('missions', '시킨 일', '날짜와 상관없이 남아 있어요', ms.map((m) => card('mission', { id: m.id, title: m.title, amount: m.amount, descr: '' }, s, pending, { isNew: isNew(m) }))),
+      section('missions', '시킨 일', '날짜와 상관없이 남아 있어요', ms.map((m) => card('mission', { id: m.id, title: m.title, amount: m.amount, descr: m.repeatable ? '여러 번 할 수 있어요' : '', repeatable: m.repeatable }, s, pending, { isNew: isNew(m) }))),
       section('base', '앞가림', '했으면 눌러서 신청해요', of('base').map((i) => card('base', i, s, pending))),
       section('extra', '심부름', '여러 번 할 수 있어요', of('extra').map((i) => card('extra', i, s, pending))),
       section('optional', '내가 고르는 것', '쓴 날만 신청해요', of('optional').map((i) => card('optional', i, s, pending))),

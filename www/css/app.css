@@ -114,6 +114,8 @@ button { font-family: inherit; }
 .spend { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; background: var(--panel2); border: 1.5px solid var(--line); border-radius: 16px; color: var(--text); font-family: inherit; cursor: pointer; }
 .spend:disabled { opacity: .4; cursor: not-allowed; }
 .reason { font-size: 12px; color: var(--mut); padding-left: 4px; }
+.check-row { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; margin: 6px 0 12px; color: var(--mut); }
+.check-row input { width: 20px; height: 20px; flex: none; margin-top: 1px; }
 .rep-note { font-size: 12px; color: var(--mut); padding-left: 4px; }
 .fixed-list { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 4px 14px; }
 .fixed-row { display: flex; justify-content: space-between; gap: 12px; min-height: 44px; align-items: center; font-size: 14px; border-bottom: 1px solid var(--line); }
